@@ -1,0 +1,23 @@
+# Local development database: PostgreSQL 17 with pgvector (same image as the tests).
+#   podman compose up -d      # or: docker compose up -d
+#   podman compose down       # stop; add -v to also delete the data
+# Host port 5433 avoids clashing with a locally installed PostgreSQL on 5432.
+services:
+  postgres:
+    image: docker.io/pgvector/pgvector:pg17
+    environment:
+      POSTGRES_DB: chat
+      POSTGRES_USER: chat
+      POSTGRES_PASSWORD: chat # local development only
+    ports:
+      - "${DB_PORT:-5433}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U chat -d chat"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  postgres-data:

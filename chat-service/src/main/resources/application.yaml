@@ -3,7 +3,7 @@ spring:
     name: chat-service
   datasource:
     # Defaults match compose.yaml at the repo root; override with environment variables everywhere else.
-    url: ${DB_URL:jdbc:postgresql://localhost:5432/chat}
+    url: ${DB_URL:jdbc:postgresql://localhost:5433/chat}
     username: ${DB_USERNAME:chat}
     password: ${DB_PASSWORD:chat}
   jpa:
