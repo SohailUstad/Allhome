@@ -5,7 +5,8 @@ FROM docker.io/library/eclipse-temurin:21-jdk AS build
 WORKDIR /build
 COPY .mvn .mvn
 COPY mvnw pom.xml ./
-RUN ./mvnw -B -q dependency:go-offline
+# Sources uploaded from Windows (e.g. gcloud builds submit) carry no executable bit.
+RUN chmod +x mvnw && ./mvnw -B -q dependency:go-offline
 COPY src src
 RUN ./mvnw -B -q package -DskipTests && cp target/chat-service-*.jar app.jar
 
