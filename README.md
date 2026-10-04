@@ -12,6 +12,18 @@ repository: versioned, observable and testable.
 | Running version | https://chat-service-343129434945.asia-south1.run.app/actuator/info |
 | SalesIQ webhook | `https://chat-service-343129434945.asia-south1.run.app/api/salesiq/webhook` |
 
+**Operator console** (one login, top navigation):
+
+| Page | What the operator does there |
+|---|---|
+| **Leads** `/leads` | Find and follow up leads: filters, status, transcript (with the model and prompt version of each reply), persona correction, CSV export |
+| **Agent prompt** `/prompts` | Read the system prompt in sections; edit, add or remove sections; **Ask AI** to propose a change (choose the model and reasoning effort); try a draft in the test chat; activate (after the evals pass) or roll back |
+| **Agent model** `/agent-model` | Change the model that answers visitors, with a warning, a required reason and a recorded history |
+| **Evals** `/evals` | Edit the eval cases, run them against a prompt draft and model, read and compare reports |
+
+**Architecture in depth** (diagrams: system, deployment, services, message flow, database, prompt lifecycle, evals,
+demo walkthrough): [docs/architecture.md](docs/architecture.md).
+
 **Contents:** [Architecture](#architecture) · [Setup](#setup) · [SalesIQ integration](#salesiq-integration) ·
 [Knowledge base](#knowledge-base) · [Agent and configuration](#agent-and-configuration) ·
 [Lead qualification](#lead-qualification) · [Observability](#observability-and-debugging) · [Evals](#evals) ·
