@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments :: head('Agent model · ColourCoats')}"></head>
+<body>
+<nav th:replace="~{fragments :: operatorNav('model')}"></nav>
+
+<main class="container-fluid px-3 px-lg-4 py-4">
+    <div class="alert alert-success alert-dismissible fade show py-2" th:if="${notice}" role="status">
+        <span th:text="${notice}">Saved.</span>
+        <button type="button" class="btn-close py-2" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+    <div class="alert alert-danger alert-dismissible fade show py-2" th:if="${error}" role="alert">
+        <span th:text="${error}">Error.</span>
+        <button type="button" class="btn-close py-2" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+
+    <h1 class="h2 mb-1">Agent model</h1>
+    <p class="text-secondary mb-4">The OpenAI model that answers visitors on the website, SalesIQ and Instagram.
+        Live now: <strong class="font-monospace" th:text="${live.model}">gpt-4.1-mini</strong>
+        <span th:if="${live.changeId == null}" class="small">(configured default)</span></p>
+
+    <div class="row g-4">
+        <div class="col-lg-6">
+            <form class="card detail-card" th:action="@{/agent-model}" method="post">
+                <div class="card-body">
+                    <h2 class="h5 mb-3">Change the live model</h2>
+                    <div class="alert alert-warning small">
+                        <i class="bi bi-exclamation-triangle me-1"></i><strong>This affects every live conversation</strong>
+                        from its next message: tone, accuracy, speed and cost can change. SalesIQ waits at most 3.8 s per
+                        reply; a slower model means more visitors get the holding message and a handoff. Run the evals with
+                        the new model first (Evals page) and compare the report.
+                    </div>
+                    <label class="form-label field-label" for="model">New model</label>
+                    <select class="form-select mb-3" id="model" name="model" required>
+                        <option th:each="m : ${allowed}" th:value="${m.id}" th:disabled="${m.id == live.model}"
+                                th:text="${m.label} + ' — ' + ${m.description}">model</option>
+                    </select>
+                    <label class="form-label field-label" for="reason">Reason (stored with your name)</label>
+                    <textarea class="form-control mb-3" id="reason" name="reason" rows="3" required minlength="15"
+                              maxlength="1000" th:text="${reason}"
+                              placeholder="e.g. gpt-4.1-mini misclassifies Hinglish personas; evals with gpt-4.1: 94% vs 86%"></textarea>
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="checkbox" id="confirmed" name="confirmed" value="true" required>
+                        <label class="form-check-label" for="confirmed">I understand this changes the model for all live conversations.</label>
+                    </div>
+                    <button class="btn btn-clay" type="submit"
+                            onclick="return confirm('Change the model for ALL live conversations now?');">
+                        <i class="bi bi-arrow-repeat me-1"></i>Change live model</button>
+                </div>
+            </form>
+        </div>
+        <div class="col-lg-6">
+            <div class="card detail-card">
+                <div class="card-body">
+                    <h2 class="h5 mb-3">History</h2>
+                    <p class="text-secondary small mb-0" th:if="${history.isEmpty()}">No changes yet; the configured default
+                        <span class="font-monospace" th:text="${defaultModel}">model</span> is live.</p>
+                    <ul class="list-unstyled mb-0" th:unless="${history.isEmpty()}">
+                        <li class="mb-3" th:each="c : ${history}">
+                            <div><span class="font-monospace" th:text="${c.previousModel}">a</span> →
+                                <strong class="font-monospace" th:text="${c.model}">b</strong></div>
+                            <div class="small" th:text="${c.reason}">reason</div>
+                            <div class="small text-secondary"><span th:text="${c.changedBy}">op</span>,
+                                <span th:text="${#temporals.format(c.changedAt.atZone(zone), 'dd MMM yyyy, HH:mm')}">date</span></div>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</main>
+
+<script th:replace="~{fragments :: bootstrapJs}"></script>
+</body>
+</html>

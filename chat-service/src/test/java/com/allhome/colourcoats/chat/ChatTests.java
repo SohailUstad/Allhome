@@ -35,7 +35,7 @@ class ChatTests {
         when(repository.findLead(any())).thenReturn(Lead.EMPTY);
         try {
             var service = new ChatService(ChatClient.builder(model), search, repository, TransactionOperations.withoutTransaction(),
-                    SystemPrompts.fixed("SYSTEM PROMPT {not a template}"), 20, true, "Connecting you now.");
+                    SystemPrompts.fixed("SYSTEM PROMPT {not a template}"), LiveModels.fixed("gpt-test"), 20, true, "Connecting you now.");
             return MockMvcBuilders.standaloneSetup(new ChatController(service, repository))
                     .setControllerAdvice(new ApiErrors()).build();
         } catch (Exception e) {
@@ -81,6 +81,7 @@ class ChatTests {
         assertThat(messages).hasSize(4);
         assertThat(messages.get(0)).isInstanceOf(SystemMessage.class);
         assertThat(messages.get(0).getText()).isEqualTo("SYSTEM PROMPT {not a template}");
+        assertThat(prompt.getValue().getOptions().getModel()).isEqualTo("gpt-test"); // the live model, per request
         assertThat(messages.get(1).getText()).isEqualTo("We are repainting our villa in Pune");
         assertThat(messages.get(2)).isInstanceOf(AssistantMessage.class);
         assertThat(messages.get(3).getText()).contains("Anti-fungal systems", "city: Pune", "persona: HOMEOWNER",
@@ -91,7 +92,7 @@ class ChatTests {
         order.verify(repository).saveUserMessage(id, "exterior walls");
         order.verify(model).call(any(Prompt.class));
         order.verify(repository).saveAssistantMessage(eq(id), eq("We offer anti-fungal systems for the monsoon-facing side."),
-                eq(false), argThat(s -> s.size() == 1), any(), any(), any(), any());
+                eq(false), argThat(s -> s.size() == 1), any(), any(), any(), any(), any());
         var lead = ArgumentCaptor.forClass(Lead.class);
         order.verify(repository).saveLead(eq(id), lead.capture());
         assertThat(lead.getValue().city()).isEqualTo("Pune");            // known detail kept when model returns null
@@ -110,7 +111,7 @@ class ChatTests {
                         .content("{\"message\":\"who is the founder?\",\"channel\":\"ZOHO_SALESIQ\"}"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.handoff").value(true))
                 .andExpect(jsonPath("$.reply").value(expected));
-        verify(repository).saveAssistantMessage(any(), eq(expected), eq(true), any(), any(), any(), any(), any());
+        verify(repository).saveAssistantMessage(any(), eq(expected), eq(true), any(), any(), any(), any(), any(), any());
     }
 
     @Test void webChatHandoffKeepsItsQuestionBecauseNobodyTakesOver() throws Exception {
@@ -133,7 +134,7 @@ class ChatTests {
         mvc.perform(post("/api/chat").contentType(MediaType.APPLICATION_JSON).content("{\"message\":\"price per sq ft?\"}"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.handoff").value(true))
                 .andExpect(jsonPath("$.reply").value("I don't have pricing information. A specialist will call you."));
-        verify(repository).saveAssistantMessage(any(), any(), eq(true), any(), any(), any(), any(), any());
+        verify(repository).saveAssistantMessage(any(), any(), eq(true), any(), any(), any(), any(), any(), any());
         verify(repository).requestHandoff(any(UUID.class), eq("Asked for exterior paint price"));
         var lead = ArgumentCaptor.forClass(Lead.class);
         verify(repository).saveLead(any(), lead.capture());
@@ -203,18 +204,18 @@ class ChatTests {
                 .andExpect(status().isServiceUnavailable())
                 .andExpect(content().string(not(containsString("secret"))));
         verify(repository).saveUserMessage(any(), eq("hello"));
-        verify(repository, never()).saveAssistantMessage(any(), any(), anyBoolean(), any(), any(), any(), any(), any());
+        verify(repository, never()).saveAssistantMessage(any(), any(), anyBoolean(), any(), any(), any(), any(), any(), any());
         verify(repository, never()).saveLead(any(), any());
     }
 
     @Test void previewUsesTheGivenPromptAndHistoryAndStoresNothing() {
         var service = new ChatService(ChatClient.builder(model), search, repository, TransactionOperations.withoutTransaction(),
-                SystemPrompts.fixed("ACTIVE PROMPT"), 20, true, "Connecting you now.");
+                SystemPrompts.fixed("ACTIVE PROMPT"), LiveModels.fixed("gpt-test"), 20, true, "Connecting you now.");
         when(search.search(any())).thenReturn(List.of());
         modelReturns("{\"reply\":\"A specialist will help.\",\"handoff\":true,\"handoffReason\":\"Wants a quote\","
                 + "\"persona\":\"HOMEOWNER\",\"intent\":\"READY_TO_ENGAGE\",\"lead\":{\"city\":\"Pune\"}}");
 
-        var turn = service.preview(new SystemPrompts.SystemPrompt(UUID.randomUUID(), 7, "DRAFT PROMPT"),
+        var turn = service.preview(new SystemPrompts.SystemPrompt(UUID.randomUUID(), 7, "DRAFT PROMPT"), "gpt-4.1",
                 List.of(new ChatRepository.StoredMessage("USER", "Hi", null),
                         new ChatRepository.StoredMessage("ASSISTANT", "Hello!", null)),
                 Lead.EMPTY, "Send me a quote", Channel.INSTAGRAM);
@@ -227,6 +228,7 @@ class ChatTests {
         var prompt = ArgumentCaptor.forClass(Prompt.class);
         verify(model).call(prompt.capture());
         assertThat(prompt.getValue().getInstructions().get(0).getText()).isEqualTo("DRAFT PROMPT");
+        assertThat(prompt.getValue().getOptions().getModel()).isEqualTo("gpt-4.1"); // the model asked for, not the live one
         assertThat(prompt.getValue().getInstructions().get(1).getText()).isEqualTo("Hi");
         assertThat(prompt.getValue().getInstructions().getLast().getText()).contains("channel: INSTAGRAM");
         verify(search).search("Hi\nSend me a quote");

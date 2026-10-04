@@ -29,6 +29,10 @@
                     <i class="bi bi-telephone-outbound me-1"></i>Needs follow-up</a></li>
                 <li class="nav-item"><a class="nav-link" th:classappend="${active == 'prompt'} ? 'active'" th:href="@{/prompts}">
                     <i class="bi bi-sliders me-1"></i>Agent prompt</a></li>
+                <li class="nav-item"><a class="nav-link" th:classappend="${active == 'model'} ? 'active'" th:href="@{/agent-model}">
+                    <i class="bi bi-cpu me-1"></i>Agent model</a></li>
+                <li class="nav-item"><a class="nav-link" th:classappend="${active == 'evals'} ? 'active'" th:href="@{/evals}">
+                    <i class="bi bi-clipboard-check me-1"></i>Evals</a></li>
                 <li class="nav-item"><a class="nav-link" th:href="@{/}" target="_blank" rel="noopener">
                     <i class="bi bi-box-arrow-up-right me-1"></i>Website</a></li>
             </ul>

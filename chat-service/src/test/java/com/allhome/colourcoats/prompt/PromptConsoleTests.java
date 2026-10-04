@@ -145,4 +145,40 @@ class PromptConsoleTests {
 		mvc.perform(get("/prompts/{id}", UUID.randomUUID()).with(OPERATOR)).andExpect(status().isNotFound());
 	}
 
+	@Test
+	void sectionsAreAddedAndRemovedFromTheConsole() throws Exception {
+		UUID active = service.active().versionId();
+		mvc.perform(get("/prompts/{id}/sections/new", active).param("after", "complaints").with(OPERATOR))
+			.andExpect(status().isOk())
+			.andExpect(content().string(containsString("Insert after")));
+		mvc.perform(post("/prompts/{id}/sections", active).param("title", "Festive offers")
+			.param("body", " ")
+			.param("after", "complaints")
+			.with(OPERATOR)
+			.with(csrf())).andExpect(status().isOk()).andExpect(content().string(containsString("cannot be empty")));
+
+		String location = mvc
+			.perform(post("/prompts/{id}/sections", active).param("title", "Festive offers")
+				.param("body", "Only mention offers listed in KNOWLEDGE.")
+				.param("after", "complaints")
+				.with(OPERATOR)
+				.with(csrf()))
+			.andExpect(flash().attribute("notice", containsString("added to draft version 2")))
+			.andReturn()
+			.getResponse()
+			.getRedirectedUrl();
+		UUID draft = service.versions().getFirst().getId();
+		assertThat(location).isEqualTo("/prompts/" + draft + "?section=festive-offers");
+
+		mvc.perform(post("/prompts/{id}/sections/attachments/remove", draft).with(OPERATOR).with(csrf()))
+			.andExpect(redirectedUrl("/prompts/" + draft));
+		mvc.perform(post("/prompts/{id}/sections/persona/remove", draft).with(OPERATOR).with(csrf()))
+			.andExpect(flash().attribute("error", containsString("cannot be removed")));
+		mvc.perform(get("/prompts/{id}", draft).param("section", "festive-offers").with(OPERATOR))
+			.andExpect(content().string(containsString("Removed:")))
+			.andExpect(content().string(containsString(">12. ATTACHMENTS</span>")))
+			.andExpect(content().string(containsString("Festive offers")))
+			.andExpect(content().string(containsString("Remove section")));
+	}
+
 }

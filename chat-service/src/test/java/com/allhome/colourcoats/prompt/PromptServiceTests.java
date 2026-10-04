@@ -131,4 +131,60 @@ class PromptServiceTests {
 		assertThat(service.versions()).hasSize(2);
 	}
 
+	@Test
+	void operatorCanAddSectionsIntoADraft() {
+		var v1 = service.activeVersion();
+
+		var draft = service.addSection(v1.getId(), "16. Festive offers", "Mention Diwali offers only if KNOWLEDGE lists one.",
+				"complaints", null, "op");
+
+		assertThat(draft.getStatus()).isEqualTo(PromptStatus.DRAFT);
+		assertThat(draft.getBaseVersionId()).isEqualTo(v1.getId());
+		assertThat(draft.getNote()).isEqualTo("Added section '16. Festive offers'");
+		var keys = draft.getSections().stream().map(PromptSection::key).toList();
+		assertThat(keys.get(keys.indexOf("complaints") + 1)).isEqualTo("festive-offers");
+		assertThat(draft.getContent()).contains("## 16. Festive offers\n\nMention Diwali offers only if KNOWLEDGE lists one.");
+		assertThat(service.lock("festive-offers")).isEqualTo(SectionLock.NONE);
+		assertThat(service.active().versionId()).isEqualTo(v1.getId()); // visitors unaffected
+
+		var same = service.addSection(draft.getId(), "Festive offers", "Second one.", "festive-offers", null, "op");
+		assertThat(same.getId()).isEqualTo(draft.getId()); // added to the same draft
+		assertThat(same.section("festive-offers-2")).isPresent();
+		var lookAlike = service.addSection(draft.getId(), "Output", "Not the real output section.", "role", null, "op");
+		assertThat(lookAlike.section("output-2")).isPresent(); // never takes a locked section's key
+		assertThat(lookAlike.section("output").orElseThrow().body()).isEqualTo(v1.section("output").orElseThrow().body());
+
+		assertThatThrownBy(() -> service.addSection(draft.getId(), " ", "x", "role", null, "op"))
+			.isInstanceOf(PromptExceptions.RuleViolation.class);
+		assertThatThrownBy(() -> service.addSection(draft.getId(), "Title", " ", "role", null, "op"))
+			.hasMessageContaining("cannot be empty");
+		assertThatThrownBy(() -> service.addSection(draft.getId(), "Title", "x", "nope", null, "op"))
+			.hasMessageContaining("no section 'nope'");
+	}
+
+	@Test
+	void operatorCanRemoveOrdinarySectionsButNeverLockedOrProtectedOnes() {
+		var v1 = service.activeVersion();
+
+		var draft = service.removeSection(v1.getId(), "attachments", null, "op");
+
+		assertThat(draft.getStatus()).isEqualTo(PromptStatus.DRAFT);
+		assertThat(draft.section("attachments")).isEmpty();
+		assertThat(draft.getContent()).doesNotContain("## 12. ATTACHMENTS");
+		assertThat(draft.getSections()).hasSize(v1.getSections().size() - 1);
+		assertThat(service.removeSection(draft.getId(), "examples", "Examples confuse the model", "op").getNote())
+			.isEqualTo("Examples confuse the model");
+
+		for (String key : java.util.List.of("input", "output", "strict-grounding", "persona", "intent")) {
+			assertThatThrownBy(() -> service.removeSection(draft.getId(), key, null, "op"))
+				.isInstanceOf(PromptExceptions.RuleViolation.class)
+				.hasMessageContaining("cannot be removed");
+		}
+		assertThatThrownBy(() -> service.removeSection(draft.getId(), "attachments", null, "op"))
+			.hasMessageContaining("no section");
+
+		service.activate(draft.getId(), "op");
+		assertThat(service.active().content()).doesNotContain("ATTACHMENTS");
+	}
+
 }

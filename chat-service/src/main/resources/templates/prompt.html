@@ -34,7 +34,7 @@
         <div class="d-flex flex-wrap gap-2">
             <form th:if="${version.status.name() == 'DRAFT' or version.status.name() == 'ARCHIVED'}"
                   th:action="@{/prompts/{id}/activate(id=${version.id})}" method="post" class="m-0">
-                <button class="btn btn-clay" type="submit" th:disabled="${stale}">
+                <button class="btn btn-clay" type="submit" th:disabled="${stale or (gate != null and !gate.allowed())}">
                     <i class="bi bi-rocket-takeoff me-1"></i>
                     <span th:text="${version.status.name() == 'DRAFT'} ? 'Activate draft' : 'Activate again (roll back)'">Activate</span>
                 </button>
@@ -53,6 +53,13 @@
         <strong>Draft.</strong> Visitors keep getting the active version until you activate this one.
         <span th:if="${base != null}"><span th:text="${changedCount}">1</span> section(s) changed from version
             <span th:text="${base.versionNumber}">1</span>.</span>
+        <div th:unless="${removed.isEmpty()}" class="mt-1">
+            <i class="bi bi-dash-circle me-1"></i>Removed: <span th:text="${#strings.listJoin(removed, ', ')}">section</span></div>
+        <div th:if="${gate != null and gate.message() != null}" class="mt-1"
+             th:classappend="${gate.allowed()} ? 'text-success' : 'text-danger'">
+            <i class="bi me-1" th:classappend="${gate.allowed()} ? 'bi-patch-check' : 'bi-clipboard-x'"></i>
+            <span th:text="${gate.message()}">Run the evals first.</span>
+            <a th:unless="${gate.allowed()}" th:href="@{/evals(prompt=${version.id})}">Run the evals on this draft</a></div>
         <div th:if="${stale}" class="mt-1 text-danger">
             <i class="bi bi-exclamation-triangle me-1"></i>Another version was activated after this draft was started,
             so it can no longer be activated. Edit the active version to start a new draft.</div>
@@ -75,6 +82,10 @@
                     </a>
                 </div>
             </div>
+            <a class="btn btn-sm btn-outline-clay w-100 mt-2"
+               th:if="${version.status.name() == 'DRAFT' or version.status.name() == 'ACTIVE'}"
+               th:href="@{/prompts/{id}/sections/new(id=${version.id},after=${selected.key})}">
+                <i class="bi bi-plus-lg me-1"></i>Add section</a>
             <p class="small text-secondary mt-2 mb-0"><i class="bi bi-lock-fill me-1"></i>locked ·
                 <i class="bi bi-shield-exclamation me-1"></i>protected ·
                 <i class="bi bi-circle-fill text-warning me-1"></i>changed in draft</p>
@@ -140,6 +151,12 @@
                                th:if="${!selected.locked() and (version.status.name() == 'DRAFT' or version.status.name() == 'ACTIVE')}"
                                th:href="@{/prompts/{id}/sections/{key}/edit(id=${version.id},key=${selected.key})}">
                                 <i class="bi bi-pencil me-1"></i>Edit section</a>
+                            <form class="m-0" method="post"
+                                  th:if="${selected.lock.name() == 'NONE' and (version.status.name() == 'DRAFT' or version.status.name() == 'ACTIVE')}"
+                                  th:action="@{/prompts/{id}/sections/{key}/remove(id=${version.id},key=${selected.key})}"
+                                  onsubmit="return confirm('Remove this section? It goes into a draft; visitors are not affected until the draft passes the evals and is activated.');">
+                                <button class="btn btn-sm btn-outline-danger" type="submit"><i class="bi bi-trash3 me-1"></i>Remove section</button>
+                            </form>
                         </div>
                     </div>
                     <p class="small text-secondary" th:if="${selected.locked()}">The application depends on this section

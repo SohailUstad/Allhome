@@ -39,22 +39,27 @@ public class ChatRepository {
     /** A fixed message (fallback, busy, transfer), not written by the model. */
     public void saveAssistantMessage(UUID conversationId, String content, boolean handoff, List<ChatSource> sources,
                                      String model, Integer promptTokens, Integer completionTokens) {
-        saveAssistantMessage(conversationId, content, handoff, sources, model, promptTokens, completionTokens, null);
+        saveAssistantMessage(conversationId, content, handoff, sources, model, promptTokens, completionTokens, null, null);
     }
 
-    /** @param promptVersionId the system prompt version that produced the reply */
+    /**
+     * @param model the model that answered, as reported by OpenAI
+     * @param promptVersionId the system prompt version that produced the reply
+     * @param modelChangeId the live-model change in force (null: the configured default model)
+     */
     @Transactional
     public void saveAssistantMessage(UUID conversationId, String content, boolean handoff, List<ChatSource> sources,
-                                     String model, Integer promptTokens, Integer completionTokens, UUID promptVersionId) {
+                                     String model, Integer promptTokens, Integer completionTokens, UUID promptVersionId,
+                                     UUID modelChangeId) {
         jdbc.sql("""
                 INSERT INTO chat_message (conversation_id, role, content, handoff, sources, model, prompt_tokens,
-                                          completion_tokens, prompt_version_id)
-                VALUES (:c, 'ASSISTANT', :content, :handoff, CAST(:sources AS JSONB), :model, :pt, :ct, :pv)
+                                          completion_tokens, prompt_version_id, model_change_id)
+                VALUES (:c, 'ASSISTANT', :content, :handoff, CAST(:sources AS JSONB), :model, :pt, :ct, :pv, :mc)
                 """)
                 .param("c", conversationId).param("content", content).param("handoff", handoff)
                 .param("sources", json.writeValueAsString(sources))
                 .param("model", model).param("pt", promptTokens).param("ct", completionTokens)
-                .param("pv", promptVersionId)
+                .param("pv", promptVersionId).param("mc", modelChangeId)
                 .update();
     }
 

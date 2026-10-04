@@ -75,7 +75,7 @@ class PromptTestChatController {
 		history = history.subList(Math.max(0, history.size() - historySize), history.size());
 
 		ChatService.Turn turn = chat.preview(
-				new SystemPrompts.SystemPrompt(version.getId(), version.getVersionNumber(), version.getContent()),
+				new SystemPrompts.SystemPrompt(version.getId(), version.getVersionNumber(), version.getContent()), null,
 				history, known(request.lead()), message, channel);
 		Lead lead = turn.lead();
 		return new TestReply(turn.reply(), turn.handoff(), turn.handoffReason(), lead, lead.status(),

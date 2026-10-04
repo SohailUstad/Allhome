@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments :: head('Evals · ColourCoats')}"></head>
+<body>
+<nav th:replace="~{fragments :: operatorNav('evals')}"></nav>
+
+<main class="container-fluid px-3 px-lg-4 py-4">
+    <div class="alert alert-danger py-2" th:if="${error}" role="alert" th:text="${error}">Error</div>
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+        <h1 class="h2 mb-0">Evals</h1>
+        <a class="btn btn-outline-secondary" th:href="@{/evals/cases}"><i class="bi bi-list-check me-1"></i>Cases
+            (<span th:text="${enabledCount}">36</span> enabled)</a>
+    </div>
+    <p class="text-secondary">Run the scripted conversations against a prompt version and a model, with the real
+        knowledge. Nothing is stored as a conversation or lead. A draft can only be activated after a full run with the live
+        model passes at least <strong th:text="${#numbers.formatDecimal(minPassRate * 100, 1, 0)} + '%'">85%</strong> of the cases.</p>
+
+    <div class="row g-4">
+        <div class="col-lg-4">
+            <form class="card detail-card" th:action="@{/evals/runs}" method="post">
+                <div class="card-body">
+                    <h2 class="h5 mb-3">New run</h2>
+                    <label class="form-label field-label" for="prompt">Prompt version</label>
+                    <select class="form-select mb-3" id="prompt" name="prompt" required>
+                        <option th:each="v : ${versions}" th:value="${v.id}" th:selected="${v.id == selectedPrompt}"
+                                th:text="'v' + ${v.versionNumber} + ' · ' + ${#strings.toLowerCase(v.status.name())} + (${v.note != null} ? ' · ' + ${#strings.abbreviate(v.note, 40)} : '')">v1</option>
+                    </select>
+                    <label class="form-label field-label" for="model">Model</label>
+                    <select class="form-select mb-3" id="model" name="model">
+                        <option th:each="m : ${models}" th:value="${m.id}" th:selected="${m.id == liveModel}"
+                                th:text="${m.label} + (${m.id == liveModel} ? ' (live)' : '')">model</option>
+                    </select>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="judge" name="judge" value="true" checked>
+                        <label class="form-check-label" for="judge">Grounding judge (gpt-4.1, slower, more cost)</label>
+                    </div>
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="checkbox" id="criticalOnly" name="criticalOnly" value="true">
+                        <label class="form-check-label" for="criticalOnly">Only the <span th:text="${criticalCount}">14</span>
+                            critical cases (quick check; cannot unlock an activation)</label>
+                    </div>
+                    <button class="btn btn-clay" type="submit"><i class="bi bi-play-fill me-1"></i>Start run</button>
+                    <p class="small text-secondary mt-2 mb-0">A full run takes several minutes and costs a few cents to a dollar,
+                        depending on the model. Keep the page open while it runs.</p>
+                </div>
+            </form>
+        </div>
+        <div class="col-lg-8">
+            <div class="card detail-card">
+                <div class="card-body">
+                    <h2 class="h5 mb-3">Recent runs</h2>
+                    <p class="text-secondary small mb-0" th:if="${runs.isEmpty()}">No runs yet.</p>
+                    <div class="table-responsive" th:unless="${runs.isEmpty()}">
+                        <table class="table table-sm align-middle mb-0">
+                            <thead><tr class="small text-secondary"><th>Started</th><th>Prompt</th><th>Model</th><th>Cases</th><th>Passed</th><th></th></tr></thead>
+                            <tbody>
+                            <tr th:each="r : ${runs}">
+                                <td class="small text-nowrap"><a th:href="@{/evals/runs/{id}(id=${r.id})}"
+                                    th:text="${#temporals.format(r.createdAt.atZone(zone), 'dd MMM, HH:mm')}">date</a>
+                                    · <span th:text="${r.createdBy}">op</span></td>
+                                <td th:text="'v' + ${versionNumbers.get(r.promptVersionId)}">v1</td>
+                                <td class="font-monospace small" th:text="${r.model}">model</td>
+                                <td class="small" th:text="${r.caseIds.size()} + (${r.fullRun} ? ' (full)' : ' (critical)')">36</td>
+                                <td th:if="${r.completed}"><strong th:text="${#numbers.formatDecimal(r.passRate() * 100, 1, 0)} + '%'"
+                                    th:classappend="${r.passRate() >= minPassRate} ? 'text-success' : 'text-danger'">92%</strong></td>
+                                <td th:unless="${r.completed}" class="small text-secondary">running / stopped</td>
+                                <td><span class="badge text-bg-success" th:if="${r.completed and r.fullRun and r.passRate() >= minPassRate}">gate passed</span></td>
+                            </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</main>
+<script th:replace="~{fragments :: bootstrapJs}"></script>
+</body>
+</html>

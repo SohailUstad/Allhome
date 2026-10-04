@@ -77,7 +77,9 @@ public class LeadRepository {
         }
     }
 
-    public record Message(String role, String content, boolean handoff, List<ChatSource> sources, OffsetDateTime createdAt) {}
+    /** @param model and promptVersion: what produced an assistant reply (null for visitor and fixed messages) */
+    public record Message(String role, String content, boolean handoff, List<ChatSource> sources, OffsetDateTime createdAt,
+                          String model, Integer promptVersion) {}
 
     public record Summary(long total, long qualified, long needsFollowUp, long last7Days) {}
 
@@ -105,10 +107,16 @@ public class LeadRepository {
     }
 
     public List<Message> messages(UUID id) {
-        return jdbc.sql("SELECT role, content, handoff, sources::text AS sources, created_at FROM chat_message WHERE conversation_id = :id ORDER BY id")
+        return jdbc.sql("""
+                SELECT m.role, m.content, m.handoff, m.sources::text AS sources, m.created_at, m.model,
+                       p.version_number AS prompt_version
+                FROM chat_message m LEFT JOIN prompt_version p ON p.id = m.prompt_version_id
+                WHERE m.conversation_id = :id ORDER BY m.id
+                """)
                 .param("id", id)
                 .query((rs, i) -> new Message(rs.getString("role"), rs.getString("content"), rs.getBoolean("handoff"),
-                        sources(rs.getString("sources")), ts(rs, "created_at")))
+                        sources(rs.getString("sources")), ts(rs, "created_at"), rs.getString("model"),
+                        rs.getObject("prompt_version", Integer.class)))
                 .list();
     }
 
