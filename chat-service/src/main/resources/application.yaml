@@ -43,6 +43,10 @@ spring:
 ingestion:
   embedding-batch-size: 32
 
+retrieval:
+  top-k: 6 # chunks per question
+  min-similarity: 0.3 # cosine similarity below which a chunk is considered unrelated
+
 operator:
   username: ${OPERATOR_USERNAME:operator}
   password: ${OPERATOR_PASSWORD:} # no default: without it nobody can log in
