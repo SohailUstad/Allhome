@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Function;
 
 import com.allhome.colourcoats.ingestion.KnowledgeChunkEntity;
 import org.springframework.ai.document.Document;
@@ -22,6 +23,8 @@ public class FakeEmbeddingModel implements EmbeddingModel {
 
 	private volatile RuntimeException failure;
 
+	private volatile Function<String, float[]> vectors = FakeEmbeddingModel::vector;
+
 	@Override
 	public EmbeddingResponse call(EmbeddingRequest request) {
 		requests.incrementAndGet();
@@ -31,14 +34,19 @@ public class FakeEmbeddingModel implements EmbeddingModel {
 		List<Embedding> results = new ArrayList<>();
 		List<String> texts = request.getInstructions();
 		for (int i = 0; i < texts.size(); i++) {
-			results.add(new Embedding(vector(texts.get(i)), i));
+			results.add(new Embedding(vectors.apply(texts.get(i)), i));
 		}
 		return new EmbeddingResponse(results);
 	}
 
 	@Override
 	public float[] embed(Document document) {
-		return vector(document.getText());
+		return vectors.apply(document.getText());
+	}
+
+	/** Decide which vector each text gets, to set up known similarities; {@link #reset()} restores the default. */
+	public void useVectors(Function<String, float[]> vectors) {
+		this.vectors = vectors;
 	}
 
 	public static float[] vector(String text) {
@@ -66,6 +74,7 @@ public class FakeEmbeddingModel implements EmbeddingModel {
 	public void reset() {
 		requests.set(0);
 		failure = null;
+		vectors = FakeEmbeddingModel::vector;
 	}
 
 }
