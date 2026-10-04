@@ -1,7 +1,5 @@
 package com.allhome.colourcoats.chat;
 
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -18,7 +16,6 @@ import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.converter.BeanOutputConverter;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionOperations;
 
@@ -31,7 +28,7 @@ public class ChatService {
     private final KnowledgeSearch knowledgeSearch;
     private final ChatRepository repository;
     private final TransactionOperations transaction;
-    private final String systemPrompt;
+    private final SystemPrompts systemPrompts;
     private final int historySize;
     private final boolean liveTransfer;
     private final String transferMessage;
@@ -40,16 +37,15 @@ public class ChatService {
     @Value("${spring.ai.openai.chat.max-completion-tokens:600}") private int maxTokens = 600;
 
     public ChatService(ChatClient.Builder chatClientBuilder, KnowledgeSearch knowledgeSearch,
-                       ChatRepository repository, TransactionOperations transaction,
-                       @Value("classpath:prompts/sales-system.md") Resource systemPrompt,
+                       ChatRepository repository, TransactionOperations transaction, SystemPrompts systemPrompts,
                        @Value("${chat.history-size:20}") int historySize,
                        @Value("${salesiq.forward-on-handoff:true}") boolean liveTransfer,
-                       @Value("${salesiq.transfer-message:Let me connect you with one of our specialists now.}") String transferMessage) throws IOException {
+                       @Value("${salesiq.transfer-message:Let me connect you with one of our specialists now.}") String transferMessage) {
         this.chatClient = chatClientBuilder.build();
         this.knowledgeSearch = knowledgeSearch;
         this.repository = repository;
         this.transaction = transaction;
-        this.systemPrompt = systemPrompt.getContentAsString(StandardCharsets.UTF_8);
+        this.systemPrompts = systemPrompts;
         this.historySize = historySize;
         this.liveTransfer = liveTransfer;
         this.transferMessage = transferMessage;
@@ -79,12 +75,13 @@ public class ChatService {
         // Text is passed as-is (no template parameters), so braces in user input or knowledge are not interpreted.
         var historyMessages = toMessages(history);
         String userTurn = currentTurn(userMessage, documents, known, channel) + "\n\n" + answerConverter.getFormat();
-        logModelRequest(historyMessages, userTurn);
+        var systemPrompt = systemPrompts.active();
+        logModelRequest(systemPrompt, historyMessages, userTurn);
         long modelStarted = System.nanoTime();
         ChatResponse response;
         try {
             response = chatClient.prompt()
-                    .system(systemPrompt)
+                    .system(systemPrompt.content())
                     .messages(historyMessages)
                     .user(userTurn)
                     .call().chatResponse();
@@ -117,7 +114,8 @@ public class ChatService {
         Runnable commit = () -> {
             transaction.executeWithoutResult(status -> {
                 repository.saveAssistantMessage(conversationId, reply, handoff, sources, metadata == null ? null : metadata.getModel(),
-                        usage == null ? null : usage.getPromptTokens(), usage == null ? null : usage.getCompletionTokens());
+                        usage == null ? null : usage.getPromptTokens(), usage == null ? null : usage.getCompletionTokens(),
+                        systemPrompt.versionId());
                 repository.saveLead(conversationId, mergedLead);
                 if (handoff) repository.requestHandoff(conversationId, handoffReason);
             });
@@ -127,17 +125,19 @@ public class ChatService {
         return new Reply(conversationId, reply, handoff, sources);
     }
 
-    /** Flow log: the exact messages and settings sent to the model, in send order. */
-    private void logModelRequest(List<Message> historyMessages, String userTurn) {
+    /** Flow log: the exact messages and settings sent to the model, in send order, and the prompt version used. */
+    private void logModelRequest(SystemPrompts.SystemPrompt systemPrompt, List<Message> historyMessages, String userTurn) {
         if (!FlowLog.enabled()) return;
         var messages = new ArrayList<Map<String, String>>();
-        messages.add(flowMessage("system", systemPrompt));
+        messages.add(flowMessage("system", systemPrompt.content()));
         for (var message : historyMessages) {
             messages.add(flowMessage(message instanceof UserMessage ? "user" : "assistant", message.getText()));
         }
         messages.add(flowMessage("user", userTurn));
         FlowLog.log("openai.request", "model", requestedModel, "temperature", temperature,
-                "max_completion_tokens", maxTokens, "messages", messages);
+                "max_completion_tokens", maxTokens,
+                "prompt_version_id", systemPrompt.versionId() == null ? null : systemPrompt.versionId().toString(),
+                "prompt_version", systemPrompt.versionNumber(), "messages", messages);
     }
 
     private static Map<String, String> flowMessage(String role, String content) {

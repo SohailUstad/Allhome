@@ -3,6 +3,8 @@ package com.allhome.colourcoats.eval;
 import com.allhome.colourcoats.chat.Channel;
 import com.allhome.colourcoats.chat.ChatService;
 import com.allhome.colourcoats.chat.Lead;
+import com.allhome.colourcoats.chat.SystemPrompts;
+import com.allhome.colourcoats.prompt.PromptService;
 import com.allhome.colourcoats.retrieval.KnowledgeSearch;
 import com.allhome.colourcoats.retrieval.RetrievalProperties;
 import java.nio.charset.StandardCharsets;
@@ -31,7 +33,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  * Behavioural evals against the REAL pipeline: pgvector retrieval + OpenAI (a few cents per run).
  * Chat persistence is in-memory so eval traffic never reaches the real chat/lead tables.
  *
- * Run:  ./mvnw test -Pevals        (options: -Deval.repeat=3 -Deval.minPassRate=0.85 -Deval.judge=false)
+ * Run:  ./mvnw test -Pevals        (options: -Deval.repeat=3 -Deval.minPassRate=0.85 -Deval.judge=false
+ *                                   -Deval.prompt=active|file|<version id>)
  * Gate: every run of every critical case must pass, and the overall check pass rate must reach minPassRate.
  * Report: target/evals/latest.md (human) and latest.json (diffable), plus timestamped copies.
  */
@@ -43,7 +46,10 @@ class ChatEvalTests {
     @Autowired RetrievalProperties retrieval;
     @Autowired JdbcClient jdbc;
     @Autowired JsonMapper json;
-    @Value("classpath:prompts/sales-system.md") Resource systemPrompt;
+    @Autowired PromptService prompts;
+    @Value("classpath:prompts/sales-system.md") Resource promptFile;
+    SystemPrompts.SystemPrompt systemPrompt;
+    String promptLabel;
     @Value("classpath:evals/cases.json") Resource casesFile;
     @Value("classpath:evals/grounding-judge.md") Resource judgePrompt;
     @Value("${chat.history-size}") int historySize;
@@ -84,6 +90,7 @@ class ChatEvalTests {
         double minPassRate = Double.parseDouble(System.getProperty("eval.minPassRate", "0.85"));
         boolean useJudge = !"false".equals(System.getProperty("eval.judge"));
         String only = System.getProperty("eval.case");
+        selectPrompt(System.getProperty("eval.prompt", "active"));
         List<EvalCase> cases = json.readValue(casesFile.getContentAsString(StandardCharsets.UTF_8), new TypeReference<>() {});
         if (only != null && !only.isBlank()) cases = cases.stream().filter(c -> c.id().equals(only)).toList();
         var judge = chatClientBuilder.build();
@@ -111,10 +118,31 @@ class ChatEvalTests {
         assertThat(passRate).as("check pass rate below gate, see %s", report).isGreaterThanOrEqualTo(minPassRate);
     }
 
+    /** "active" (what visitors get now), "file" (the git file) or a version id (e.g. a draft before activating it). */
+    private void selectPrompt(String choice) throws Exception {
+        switch (choice) {
+            case "active" -> {
+                systemPrompt = prompts.active();
+                promptLabel = "v" + systemPrompt.versionNumber() + " (active)";
+            }
+            case "file" -> {
+                systemPrompt = new SystemPrompts.SystemPrompt(null, null, promptFile.getContentAsString(StandardCharsets.UTF_8));
+                promptLabel = "file";
+            }
+            default -> {
+                var version = prompts.version(UUID.fromString(choice));
+                systemPrompt = new SystemPrompts.SystemPrompt(version.getId(), version.getVersionNumber(), version.getContent());
+                promptLabel = "v" + version.getVersionNumber() + " (" + version.getStatus().name().toLowerCase() + ")";
+            }
+        }
+        System.out.println("prompt: " + promptLabel);
+    }
+
     private RunResult runCase(EvalCase c, int run, ChatClient judge, String judgeSystem) throws Exception {
         var repository = new InMemoryChatRepository();
+        var prompt = systemPrompt;
         var service = new ChatService(chatClientBuilder, knowledgeSearch, repository, TransactionOperations.withoutTransaction(),
-                systemPrompt, historySize, true, "Let me connect you with one of our specialists now.");
+                () -> prompt, historySize, true, "Let me connect you with one of our specialists now.");
         UUID id = UUID.randomUUID();
         List<String> replies = new ArrayList<>();
         ChatService.Reply last = null;
@@ -267,7 +295,8 @@ class ChatEvalTests {
 
     private Map<String, Object> meta(int repeat, boolean judged, double minPassRate, double passRate,
                                      boolean gatePassed, List<String> criticalFailures) throws Exception {
-        var hash = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(systemPrompt.getContentAsByteArray()));
+        var hash = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+                .digest(systemPrompt.content().getBytes(StandardCharsets.UTF_8)));
         var datasets = jdbc.sql("SELECT dataset_id || '@' || dataset_version FROM ingestion_run WHERE active")
                 .query(String.class).list();
         var meta = new LinkedHashMap<String, Object>();
@@ -277,6 +306,7 @@ class ChatEvalTests {
         meta.put("minPassRate", minPassRate);
         meta.put("criticalFailures", criticalFailures);
         meta.put("model", model);
+        meta.put("prompt", promptLabel);
         meta.put("systemPromptSha256", hash.substring(0, 12));
         meta.put("datasets", datasets);
         meta.put("retrieval", Map.of("topK", retrieval.topK(), "candidates", retrieval.candidates(),
@@ -323,7 +353,8 @@ class ChatEvalTests {
         md.append(String.format("Check pass rate: %.1f%% (gate %.0f%%)  %n", (double) meta.get("checkPassRate") * 100,
                 (double) meta.get("minPassRate") * 100));
         md.append("Critical failures: ").append(meta.get("criticalFailures")).append("  \n");
-        md.append("Model `").append(meta.get("model")).append("` · prompt `").append(meta.get("systemPromptSha256"))
+        md.append("Model `").append(meta.get("model")).append("` · prompt ").append(meta.get("prompt"))
+                .append(" `").append(meta.get("systemPromptSha256"))
                 .append("` · data ").append(meta.get("datasets")).append(" · retrieval ").append(meta.get("retrieval"))
                 .append(" · repeat ").append(meta.get("repeat")).append(" · judge ").append(meta.get("judge"))
                 .append(" · ").append(meta.get("timestamp")).append("\n\n");

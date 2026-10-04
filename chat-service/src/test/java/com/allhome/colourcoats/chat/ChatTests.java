@@ -13,7 +13,6 @@ import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.model.Generation;
 import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.chat.prompt.Prompt;
-import org.springframework.core.io.ByteArrayResource;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
@@ -36,7 +35,7 @@ class ChatTests {
         when(repository.findLead(any())).thenReturn(Lead.EMPTY);
         try {
             var service = new ChatService(ChatClient.builder(model), search, repository, TransactionOperations.withoutTransaction(),
-                    new ByteArrayResource("SYSTEM PROMPT {not a template}".getBytes()), 20, true, "Connecting you now.");
+                    SystemPrompts.fixed("SYSTEM PROMPT {not a template}"), 20, true, "Connecting you now.");
             return MockMvcBuilders.standaloneSetup(new ChatController(service, repository))
                     .setControllerAdvice(new ApiErrors()).build();
         } catch (Exception e) {
@@ -92,7 +91,7 @@ class ChatTests {
         order.verify(repository).saveUserMessage(id, "exterior walls");
         order.verify(model).call(any(Prompt.class));
         order.verify(repository).saveAssistantMessage(eq(id), eq("We offer anti-fungal systems for the monsoon-facing side."),
-                eq(false), argThat(s -> s.size() == 1), any(), any(), any());
+                eq(false), argThat(s -> s.size() == 1), any(), any(), any(), any());
         var lead = ArgumentCaptor.forClass(Lead.class);
         order.verify(repository).saveLead(eq(id), lead.capture());
         assertThat(lead.getValue().city()).isEqualTo("Pune");            // known detail kept when model returns null
@@ -111,7 +110,7 @@ class ChatTests {
                         .content("{\"message\":\"who is the founder?\",\"channel\":\"ZOHO_SALESIQ\"}"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.handoff").value(true))
                 .andExpect(jsonPath("$.reply").value(expected));
-        verify(repository).saveAssistantMessage(any(), eq(expected), eq(true), any(), any(), any(), any());
+        verify(repository).saveAssistantMessage(any(), eq(expected), eq(true), any(), any(), any(), any(), any());
     }
 
     @Test void webChatHandoffKeepsItsQuestionBecauseNobodyTakesOver() throws Exception {
@@ -134,7 +133,7 @@ class ChatTests {
         mvc.perform(post("/api/chat").contentType(MediaType.APPLICATION_JSON).content("{\"message\":\"price per sq ft?\"}"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.handoff").value(true))
                 .andExpect(jsonPath("$.reply").value("I don't have pricing information. A specialist will call you."));
-        verify(repository).saveAssistantMessage(any(), any(), eq(true), any(), any(), any(), any());
+        verify(repository).saveAssistantMessage(any(), any(), eq(true), any(), any(), any(), any(), any());
         verify(repository).requestHandoff(any(UUID.class), eq("Asked for exterior paint price"));
         var lead = ArgumentCaptor.forClass(Lead.class);
         verify(repository).saveLead(any(), lead.capture());
@@ -204,7 +203,7 @@ class ChatTests {
                 .andExpect(status().isServiceUnavailable())
                 .andExpect(content().string(not(containsString("secret"))));
         verify(repository).saveUserMessage(any(), eq("hello"));
-        verify(repository, never()).saveAssistantMessage(any(), any(), anyBoolean(), any(), any(), any(), any());
+        verify(repository, never()).saveAssistantMessage(any(), any(), anyBoolean(), any(), any(), any(), any(), any());
         verify(repository, never()).saveLead(any(), any());
     }
 

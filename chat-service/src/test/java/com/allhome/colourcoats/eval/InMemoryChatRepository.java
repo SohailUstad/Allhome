@@ -22,7 +22,7 @@ class InMemoryChatRepository extends ChatRepository {
 
     @Override
     public void saveAssistantMessage(UUID id, String content, boolean handoff, List<ChatSource> sources,
-                                     String model, Integer promptTokens, Integer completionTokens) {
+                                     String model, Integer promptTokens, Integer completionTokens, UUID promptVersionId) {
         messages.get(id).add(new StoredMessage("ASSISTANT", content, null));
     }
 
