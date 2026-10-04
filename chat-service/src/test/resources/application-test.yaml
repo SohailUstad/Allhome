@@ -1,0 +1,5 @@
+# Tests never call OpenAI: the real embedding model is off and TestAiConfiguration provides a fake.
+spring:
+  ai:
+    model:
+      embedding: none
