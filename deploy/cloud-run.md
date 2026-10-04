@@ -113,3 +113,36 @@ function New-ChatSecret($name, $prompt) {
 New-ChatSecret 'chat-openai-api-key'     'OpenAI API key'
 New-ChatSecret 'chat-operator-password'  'Operator password for the lead console'
 ```
+
+The app's service account may read exactly these three secrets:
+
+```powershell
+foreach ($s in 'chat-openai-api-key','chat-db-password','chat-operator-password') {
+  gcloud secrets add-iam-policy-binding $s --project $PROJECT --member "serviceAccount:$SA" --role roles/secretmanager.secretAccessor
+}
+```
+
+## 7. Deploy to Cloud Run
+
+Public (SalesIQ and website visitors call it), one warm instance so the first message never waits for a cold start
+(SalesIQ allows 5 s), database through the Cloud SQL connector, secrets as environment variables.
+
+```powershell
+$DBURL = "jdbc:postgresql:///$DB?cloudSqlInstance=${PROJECT}:${REGION}:$SQL&socketFactory=com.google.cloud.sql.postgres.SocketFactory"
+gcloud run deploy $SERVICE --project $PROJECT --region $REGION --image "${IMAGE}:$VERSION" --service-account $SA `
+  --allow-unauthenticated --min-instances 1 --max-instances 1 --memory 1Gi --cpu 1 --cpu-boost `
+  --set-env-vars "DB_URL=$DBURL,DB_USERNAME=$DB_USER,APP_COMMIT=$COMMIT,OPENAI_CHAT_MODEL=gpt-4.1-mini" `
+  --set-secrets "OPENAI_API_KEY=chat-openai-api-key:latest,DB_PASSWORD=chat-db-password:latest,OPERATOR_PASSWORD=chat-operator-password:latest"
+```
+
+Result: revision `chat-service-00001-xmh`, URL https://chat-service-343129434945.asia-south1.run.app
+
+Check:
+
+```powershell
+$URL = 'https://chat-service-343129434945.asia-south1.run.app'
+curl.exe $URL/actuator/health   # {"status":"UP"}: running and connected to Cloud SQL (Flyway migrated it)
+curl.exe $URL/actuator/info     # {"app":{...,"commit":"bdf4b2a"}}: the deployed release
+```
+
+To change only the chat model later (no rebuild): `gcloud run services update $SERVICE --project $PROJECT --region $REGION --update-env-vars OPENAI_CHAT_MODEL=<model>`.
