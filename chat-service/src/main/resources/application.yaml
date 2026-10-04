@@ -61,9 +61,20 @@ chat:
   warm-up: true # one search + one tiny chat call at startup, so the first visitor's reply is not slow
 
 salesiq:
+  # Paste the public key(s) from SalesIQ > Zobot > Webhook > "Secure your webhook" (PEM or Base64; up to two).
+  # Empty = signatures not checked (local testing only).
+  public-keys: ${SALESIQ_PUBLIC_KEYS:}
+  response-deadline-ms: 3800 # SalesIQ times out at 5000 ms end to end; leave ~1 s for network/tunnel
   # On handoff, transfer the live chat to a SalesIQ operator ("forward"); the AI then never answers that chat again.
+  # If no operator picks it up, SalesIQ calls the bot again and gets "operator_busy" (SalesIQ's leave-a-message flow).
   forward-on-handoff: true
+  department-id: ${SALESIQ_DEPARTMENT_ID:} # optional department for forwarded chats
+  # First message of every chat (SalesIQ and the website chat). \n = line break.
+  opener: "Hi there! I’m Aira 👋\nI’m here and ready to help. What can I help you with today?"
+  fallback-message: "Thanks for your patience. I've passed your question to our team and a ColourCoats specialist will get back to you shortly."
+  contact-request: "Could you share your name and phone number?" # appended to the fallback only when no phone is known yet
   transfer-message: "Let me connect you with one of our specialists, they'll be with you shortly." # timeout/failure while forwarding
+  busy-message: "Our specialists are busy right now. Leave your message and number, and we'll get back to you soon."
 
 logging:
   # Flow log (logger "flow"): one entry per step of each message, with full payloads (personal data), written as

@@ -35,6 +35,18 @@ public final class TraceContext {
         };
     }
 
+    /** Runs work on another thread with this thread's context (and log MDC) attached, e.g. the SalesIQ chat worker. */
+    public static <T> java.util.concurrent.Callable<T> propagate(java.util.concurrent.Callable<T> work) {
+        TraceContext context = current();
+        Map<String, String> mdc = MDC.getCopyOfContextMap();
+        return () -> {
+            try (var attached = attach(context == null ? new TraceContext() : context)) {
+                if (mdc != null) MDC.setContextMap(mdc);
+                return work.call();
+            }
+        };
+    }
+
     public void bind(UUID conversation, String channel) {
         if (turnId == null) turnId = UUID.randomUUID();
         conversationId = conversation;
