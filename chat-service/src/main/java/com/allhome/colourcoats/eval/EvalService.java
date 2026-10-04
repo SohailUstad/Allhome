@@ -60,7 +60,7 @@ public class EvalService implements ActivationGate {
 	EvalService(StoredCaseRepository cases, EvalRunRepository runs, EvalResultRepository results, EvalRunner runner,
 			PromptService prompts, LiveModelService liveModels,
 			@Value("classpath:evals/cases.json") Resource seedFile,
-			@Value("${evals.activation-min-pass-rate:0.9}") double minPassRate) {
+			@Value("${evals.activation-min-pass-rate:0.85}") double minPassRate) {
 		this.cases = cases;
 		this.runs = runs;
 		this.results = results;

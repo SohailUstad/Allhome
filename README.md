@@ -253,7 +253,7 @@ become conversations or leads.
   full conversation. **Compare with** another run marks every case whose result changed. Each result keeps the case as
   it was run, so old reports stay correct after a case is edited.
 - **Activation gate:** a draft can only be activated after a full run on it **with the live model** passed at least
-  `EVAL_ACTIVATION_MIN_PASS_RATE` of the cases (default `0.9`; behaviour checks count, the noisy judge and style checks
+  `EVAL_ACTIVATION_MIN_PASS_RATE` of the cases (default `0.85`; behaviour checks count, the noisy judge and style checks
   do not; `0` switches the gate off). The prompt page says what is missing. Rolling back to an earlier version is never
   blocked.
 

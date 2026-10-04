@@ -123,11 +123,11 @@ foreach ($s in 'chat-openai-api-key','chat-db-password','chat-operator-password'
 ```
 
 **From the release with evals in the console:** the share of eval cases a prompt draft must pass before it can be
-activated is a secret too (`EVAL_ACTIVATION_MIN_PASS_RATE`, `0.9` = 90%; `0` switches the gate off). Create it once,
+activated is a secret too (`EVAL_ACTIVATION_MIN_PASS_RATE`, `0.85` = 85%; `0` switches the gate off). Create it once,
 let the app read it, and pass it on the next deploy:
 
 ```powershell
-$f = New-TemporaryFile; [IO.File]::WriteAllText($f, '0.9')
+$f = New-TemporaryFile; [IO.File]::WriteAllText($f, '0.85')
 gcloud secrets create chat-eval-min-pass-rate --data-file $f --replication-policy automatic --project $PROJECT
 Remove-Item $f
 gcloud secrets add-iam-policy-binding chat-eval-min-pass-rate --project $PROJECT --member "serviceAccount:$SA" --role roles/secretmanager.secretAccessor

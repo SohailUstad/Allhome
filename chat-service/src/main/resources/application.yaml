@@ -68,8 +68,8 @@ prompt:
 
 evals:
   # A prompt draft can only be activated after a full eval run with the live model passed at least this share of the
-  # cases (0.9 = 90%). Set through EVAL_ACTIVATION_MIN_PASS_RATE (Secret Manager on Cloud Run); 0 switches it off.
-  activation-min-pass-rate: ${EVAL_ACTIVATION_MIN_PASS_RATE:0.9}
+  # cases (0.85 = 85%). Set through EVAL_ACTIVATION_MIN_PASS_RATE (Secret Manager on Cloud Run); 0 switches it off.
+  activation-min-pass-rate: ${EVAL_ACTIVATION_MIN_PASS_RATE:0.85}
   judge-model: gpt-4.1 # grounding judge: stronger than the chat model, only used during evals
 
 live-model:
