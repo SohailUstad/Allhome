@@ -1,13 +1,13 @@
-package com.allhome.colourcodes;
+package com.allhome.colourcoats;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
 @SpringBootApplication
-public class DemoApplication {
+public class ChatServiceApplication {
 
 	public static void main(String[] args) {
-		SpringApplication.run(DemoApplication.class, args);
+		SpringApplication.run(ChatServiceApplication.class, args);
 	}
 
 }
