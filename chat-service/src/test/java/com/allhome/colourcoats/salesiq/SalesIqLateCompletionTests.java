@@ -43,7 +43,7 @@ class SalesIqLateCompletionTests {
                 finally { workerFinished.countDown(); }
             }
         };
-        var controller = new SalesIqWebhookController(service, repository, new SalesIqSignatureVerifier(""), JsonMapper.builder().build(),
+        var controller = new SalesIqWebhookController(service, repository, JsonMapper.builder().build(),
                 500, true, "", "WELCOME", "FALLBACK", "CONTACT", "TRANSFER", "BUSY");
         try {
             var mvc = MockMvcBuilders.standaloneSetup(controller).build();

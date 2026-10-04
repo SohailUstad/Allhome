@@ -20,7 +20,6 @@ import java.util.concurrent.TimeoutException;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -34,6 +33,8 @@ import tools.jackson.databind.json.JsonMapper;
  *
  * SalesIQ waits at most 5 seconds, so every reply is time-boxed: if the pipeline misses the deadline (or fails), the visitor gets a holding message,
  * the conversation is queued for a human, and SalesIQ always receives a valid 200 response.
+ *
+ * Requests are not authenticated: SalesIQ's webhook signing ("Secure your webhook") is not set up (README, Limitations).
  */
 @RestController
 @RequestMapping("/api/salesiq/webhook")
@@ -44,7 +45,6 @@ public class SalesIqWebhookController {
 
     private final ChatService chatService;
     private final ChatRepository repository;
-    private final SalesIqSignatureVerifier verifier;
     private final JsonMapper json;
     private final ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
     private final long deadlineMs;
@@ -63,8 +63,7 @@ public class SalesIqWebhookController {
     }
     @PreDestroy public void stop() { executor.shutdownNow(); }
 
-    public SalesIqWebhookController(ChatService chatService, ChatRepository repository, SalesIqSignatureVerifier verifier,
-                                    JsonMapper json,
+    public SalesIqWebhookController(ChatService chatService, ChatRepository repository, JsonMapper json,
                                     @Value("${salesiq.response-deadline-ms:3800}") long deadlineMs,
                                     @Value("${salesiq.forward-on-handoff:true}") boolean forwardOnHandoff,
                                     @Value("${salesiq.department-id:}") String department,
@@ -75,7 +74,6 @@ public class SalesIqWebhookController {
                                     @Value("${salesiq.busy-message}") String busyMessage) {
         this.chatService = chatService;
         this.repository = repository;
-        this.verifier = verifier;
         this.json = json;
         this.deadlineMs = deadlineMs;
         this.forwardOnHandoff = forwardOnHandoff;
@@ -90,14 +88,13 @@ public class SalesIqWebhookController {
 
     // No "produces": SalesIQ's Accept header must never cause a 406; the body is always JSON (see ok()).
     @PostMapping
-    public ResponseEntity<Map<String, Object>> handle(@RequestBody(required = false) byte[] rawBody,
-                                                      @RequestHeader(value = "x-siqsignature", required = false) String signature) {
+    public ResponseEntity<Map<String, Object>> handle(@RequestBody(required = false) byte[] rawBody) {
         try (var scope = TraceContext.open()) {
             long started = System.nanoTime();
             String body = rawBody == null ? "" : new String(rawBody, StandardCharsets.UTF_8);
             logReceived(body);
             try {
-                var response = respond(body, signature);
+                var response = respond(body);
                 FlowLog.log("salesiq.response", "http_status", response.getStatusCode().value(),
                         "payload", response.getBody(), "duration_ms", elapsedMs(started));
                 return response;
@@ -126,12 +123,7 @@ public class SalesIqWebhookController {
         }
     }
 
-    private ResponseEntity<Map<String, Object>> respond(String body, String signature) {
-        if (verifier.enabled() && !verifier.verify(body, signature)) {
-            TraceContext.outcome("rejected");
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).contentType(MediaType.APPLICATION_JSON)
-                    .body(reply(List.of("Unauthorized")));
-        }
+    private ResponseEntity<Map<String, Object>> respond(String body) {
         JsonNode request;
         try {
             request = body.isBlank() ? json.createObjectNode() : json.readTree(body);
