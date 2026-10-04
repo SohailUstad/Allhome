@@ -78,17 +78,42 @@ Open http://localhost:8080 (demo site) and http://localhost:8080/leads (operator
 environment variables listed in `.env.example`; the defaults match `compose.yaml`. Flyway applies the schema on
 startup.
 
-**Load knowledge** (the database starts empty; the agent then answers "I don't know"):
+**Load knowledge** (the database starts empty; the agent then answers "I don't know"). Run from `ingestion/`,
+Python 3.9+; details and options in [ingestion/README.md](ingestion/README.md):
 
 ```
 cd ingestion
-python -m pip install -r requirements.txt
-python list_pages.py                                   # crawl colourcoats.com
-python list_pages.py --stage knowledge                 # website chunks
-python pdf_knowledge.py <path>/colourcoats-brochure-2026.pdf --url https://www.colourcoats.com/brochure-2026.pdf --title "ColourCoats Brochure 2026"
-python package_knowledge.py --chunks knowledge/chunks.jsonl knowledge/pdf_chunks.jsonl --dataset-version <new version>
-curl -u operator:<password> -F "file=@colourcoats-knowledge.zip" http://localhost:8080/api/ingestions
+python -m pip install -r requirements.txt              # pypdf, for the brochure
+
+# 1. Website: crawl colourcoats.com (respects robots.txt), then turn the pages into chunks
+python list_pages.py                                   # -> pages.csv, raw_pages/
+python list_pages.py --stage knowledge                 # -> knowledge/chunks.jsonl
+
+# 2. Brochure PDF: download it, then turn its text layer into chunks
+curl.exe -o colourcoats-brochure-2026.pdf https://www.colourcoats.com/brochure-2026.pdf
+python pdf_knowledge.py colourcoats-brochure-2026.pdf --url https://www.colourcoats.com/brochure-2026.pdf --title "ColourCoats Brochure 2026"
+                                                       # -> knowledge/pdf_chunks.jsonl
+
+# 3. Package both into one versioned zip (use a new version whenever the content changes)
+python package_knowledge.py --chunks knowledge/chunks.jsonl knowledge/pdf_chunks.jsonl --dataset-version 2026-10-05
+                                                       # -> colourcoats-knowledge.zip
+
+# 4. Upload it (the app must be running); it becomes the active version
+curl.exe -u operator:<password> -F "file=@colourcoats-knowledge.zip" http://localhost:8080/api/ingestions
 ```
+
+For Cloud Run, upload to `https://chat-service-343129434945.asia-south1.run.app/api/ingestions` instead. The upload
+answers `201` (stored and active), `200` (this version is already stored), `400` (invalid zip) or `409` (this version
+exists with different content: choose a new `--dataset-version`). Then check and, if needed, roll back:
+
+```
+curl.exe -u operator:<password> http://localhost:8080/api/ingestions                    # versions, which is active
+curl.exe -u operator:<password> "http://localhost:8080/api/search?q=lime+wash"          # what the agent would retrieve
+curl.exe -u operator:<password> -X POST http://localhost:8080/api/ingestions/<runId>/activate   # roll back
+```
+
+The textures and wood-coatings catalogues are image-only PDFs: `pdf_knowledge.py` finds no text in them, so they are
+not ingested (see Limitations).
 
 **Connect SalesIQ:** set the Zobot's webhook URL to `https://<host>/api/salesiq/webhook` (for a local run, expose
 port 8080 with a tunnel such as ngrok). Assign the same Zobot to the website widget and to the connected Instagram
