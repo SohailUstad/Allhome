@@ -3,3 +3,7 @@ spring:
   ai:
     model:
       embedding: none
+
+operator:
+  username: test-operator
+  password: test-password

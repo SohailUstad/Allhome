@@ -1,5 +1,6 @@
 package com.allhome.colourcoats.ingestion;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -12,6 +13,10 @@ interface IngestionRunRepository extends JpaRepository<IngestionRun, UUID> {
 	Optional<IngestionRun> findByDatasetIdAndDatasetVersion(String datasetId, String datasetVersion);
 
 	Optional<IngestionRun> findByDatasetIdAndActiveTrue(String datasetId);
+
+	List<IngestionRun> findAllByOrderByIngestedAtDesc();
+
+	List<IngestionRun> findByDatasetIdOrderByIngestedAtDesc(String datasetId);
 
 	/**
 	 * Executes immediately (not at flush), so it can run before activating another run without ever having two

@@ -87,6 +87,13 @@ public class IngestionService {
 		return IngestionResult.of(IngestionResult.Status.ACTIVATED, run);
 	}
 
+	/** Stored versions, newest first; all datasets when {@code datasetId} is null. */
+	public List<IngestionRunSummary> list(String datasetId) {
+		List<IngestionRun> found = datasetId == null ? runs.findAllByOrderByIngestedAtDesc()
+				: runs.findByDatasetIdOrderByIngestedAtDesc(datasetId);
+		return found.stream().map(IngestionRunSummary::of).toList();
+	}
+
 	private IngestionRun store(KnowledgeArchive archive, String archiveSha256, List<float[]> embeddings) {
 		runs.deactivateAll(archive.datasetId());
 		IngestionRun run = new IngestionRun(archive, archiveSha256, Instant.now());

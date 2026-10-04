@@ -17,6 +17,13 @@ spring:
       hibernate.order_inserts: true
   flyway:
     locations: classpath:db/migration
+  mvc:
+    problemdetails:
+      enabled: true # standard errors (missing part, upload too large, ...) as RFC 9457 problem responses
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 11MB
   ai:
     model:
       # Only embeddings are used so far; the other OpenAI model types stay off until a feature needs them.
@@ -35,6 +42,10 @@ spring:
 
 ingestion:
   embedding-batch-size: 32
+
+operator:
+  username: ${OPERATOR_USERNAME:operator}
+  password: ${OPERATOR_PASSWORD:} # no default: without it nobody can log in
 
 server:
   port: ${SERVER_PORT:8080}
