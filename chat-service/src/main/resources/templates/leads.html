@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments :: head('Leads · ColourCoats')}"></head>
+<body>
+<nav th:replace="~{fragments :: operatorNav('leads')}"></nav>
+
+<main class="container-fluid px-3 px-lg-4 py-4">
+    <!-- KPIs (all conversations, not filtered) -->
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-xl-3">
+            <a class="card kpi h-100 text-decoration-none" th:href="@{/leads}">
+                <div class="card-body d-flex align-items-center gap-3">
+                    <div class="kpi-icon bg-secondary-subtle text-secondary-emphasis"><i class="bi bi-chat-left-text"></i></div>
+                    <div><div class="kpi-value text-body" th:text="${summary.total}">0</div><div class="small text-secondary">Conversations</div></div>
+                </div></a>
+        </div>
+        <div class="col-6 col-xl-3">
+            <a class="card kpi h-100 text-decoration-none" th:href="@{/leads(status='QUALIFIED')}">
+                <div class="card-body d-flex align-items-center gap-3">
+                    <div class="kpi-icon bg-success-subtle text-success-emphasis"><i class="bi bi-patch-check"></i></div>
+                    <div><div class="kpi-value text-body" th:text="${summary.qualified}">0</div><div class="small text-secondary">Qualified leads</div></div>
+                </div></a>
+        </div>
+        <div class="col-6 col-xl-3">
+            <a class="card kpi h-100 text-decoration-none" th:href="@{/leads(followUp='needed',sort='handoff')}">
+                <div class="card-body d-flex align-items-center gap-3">
+                    <div class="kpi-icon bg-danger-subtle text-danger-emphasis"><i class="bi bi-telephone-outbound"></i></div>
+                    <div><div class="kpi-value text-body" th:text="${summary.needsFollowUp}">0</div><div class="small text-secondary">Need follow-up</div></div>
+                </div></a>
+        </div>
+        <div class="col-6 col-xl-3">
+            <div class="card kpi h-100">
+                <div class="card-body d-flex align-items-center gap-3">
+                    <div class="kpi-icon bg-warning-subtle text-warning-emphasis"><i class="bi bi-calendar-week"></i></div>
+                    <div><div class="kpi-value" th:text="${summary.last7Days}">0</div><div class="small text-secondary">New in last 7 days</div></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="card filter-card mb-4">
+        <div class="card-body">
+            <form th:action="@{/leads}" method="get" class="row g-2 align-items-end" id="filterForm">
+                <div class="col-12 col-lg-4">
+                    <label class="form-label small text-secondary mb-1" for="q">Search</label>
+                    <div class="input-group">
+                        <span class="input-group-text"><i class="bi bi-search"></i></span>
+                        <input class="form-control" id="q" name="q" th:value="${filter.q}" placeholder="Name, phone, city, finish…">
+                    </div>
+                </div>
+                <div class="col-6 col-md-4 col-lg-2">
+                    <label class="form-label small text-secondary mb-1" for="status">Status</label>
+                    <select class="form-select" id="status" name="status">
+                        <option value="">Any</option>
+                        <option th:each="s : ${statuses}" th:value="${s}" th:selected="${s == filter.status}"
+                                th:text="${#strings.capitalize(#strings.toLowerCase(s))}">Status</option>
+                    </select>
+                </div>
+                <div class="col-6 col-md-4 col-lg-2">
+                    <label class="form-label small text-secondary mb-1" for="persona">Persona</label>
+                    <select class="form-select" id="persona" name="persona">
+                        <option value="">Any</option>
+                        <option th:each="p : ${personas}" th:value="${p}" th:selected="${p == filter.persona}"
+                                th:text="${#strings.capitalize(#strings.toLowerCase(#strings.replace(p, '_', ' ')))}">Persona</option>
+                    </select>
+                </div>
+                <div class="col-6 col-md-4 col-lg-2">
+                    <label class="form-label small text-secondary mb-1" for="intent">Intent</label>
+                    <select class="form-select" id="intent" name="intent">
+                        <option value="">Any</option>
+                        <option th:each="i : ${intents}" th:value="${i}" th:selected="${i == filter.intent}"
+                                th:text="${#strings.capitalize(#strings.toLowerCase(#strings.replace(i, '_', ' ')))}">Intent</option>
+                    </select>
+                </div>
+                <div class="col-6 col-md-4 col-lg-2">
+                    <label class="form-label small text-secondary mb-1" for="channel">Channel</label>
+                    <select class="form-select" id="channel" name="channel">
+                        <option value="">Any</option>
+                        <option th:each="c : ${channels}" th:value="${c.name()}" th:selected="${c.name() == filter.channel}"
+                                th:text="${c.name() == 'ZOHO_SALESIQ' ? 'SalesIQ website' : (c.name() == 'WEB_CHAT' ? 'Direct web chat' : 'Instagram')}">Channel</option>
+                    </select>
+                </div>
+                <div class="col-6 col-md-4 col-lg-2">
+                    <label class="form-label small text-secondary mb-1" for="followUp">Follow-up</label>
+                    <select class="form-select" id="followUp" name="followUp">
+                        <option value="">Any</option>
+                        <option value="needed" th:selected="${filter.followUp == 'needed'}">Needs follow-up</option>
+                        <option value="handled" th:selected="${filter.followUp == 'handled'}">Handled</option>
+                        <option value="none" th:selected="${filter.followUp == 'none'}">No handoff</option>
+                    </select>
+                </div>
+                <div class="col-6 col-md-4 col-lg-2">
+                    <label class="form-label small text-secondary mb-1" for="from">From</label>
+                    <input class="form-control" type="date" id="from" name="from" th:value="${filter.from}">
+                </div>
+                <div class="col-6 col-md-4 col-lg-2">
+                    <label class="form-label small text-secondary mb-1" for="to">To</label>
+                    <input class="form-control" type="date" id="to" name="to" th:value="${filter.to}">
+                </div>
+                <div class="col-6 col-md-4 col-lg-2">
+                    <label class="form-label small text-secondary mb-1" for="sort">Sort</label>
+                    <select class="form-select" id="sort" name="sort">
+                        <option value="updated" th:selected="${filter.sort == 'updated'}">Last activity</option>
+                        <option value="created" th:selected="${filter.sort == 'created'}">Newest</option>
+                        <option value="handoff" th:selected="${filter.sort == 'handoff'}">Handoff time</option>
+                    </select>
+                </div>
+                <div class="col-6 col-md-4 col-lg-2 d-flex gap-2">
+                    <button class="btn btn-clay flex-grow-1" type="submit"><i class="bi bi-funnel me-1"></i>Apply</button>
+                    <a class="btn btn-outline-secondary" th:href="@{/leads}" th:if="${filter.active()}" title="Clear filters">
+                        <i class="bi bi-x-lg"></i></a>
+                </div>
+            </form>
+            <div class="quick-filters d-flex flex-wrap gap-2 mt-3">
+                <span class="small text-secondary align-self-center me-1">Quick:</span>
+                <a class="btn btn-sm btn-outline-danger" th:href="@{/leads(followUp='needed',sort='handoff')}"><i class="bi bi-telephone-outbound me-1"></i>Needs follow-up</a>
+                <a class="btn btn-sm btn-outline-success" th:href="@{/leads(status='QUALIFIED')}"><i class="bi bi-patch-check me-1"></i>Qualified</a>
+                <a class="btn btn-sm btn-outline-secondary" th:href="@{/leads(intent='READY_TO_ENGAGE')}"><i class="bi bi-lightning me-1"></i>Ready to engage</a>
+                <a class="btn btn-sm btn-outline-secondary" th:href="@{/leads(persona='ARCHITECT_OR_DESIGNER')}"><i class="bi bi-rulers me-1"></i>Architects &amp; designers</a>
+                <a class="btn btn-sm btn-outline-secondary" th:href="@{/leads(persona='BUILDER_OR_DEVELOPER')}"><i class="bi bi-buildings me-1"></i>Builders</a>
+                <a class="btn btn-sm btn-outline-secondary" th:href="@{/leads(persona='PARTNER_PROSPECT')}"><i class="bi bi-people me-1"></i>Partners</a>
+                <a class="btn btn-sm btn-outline-secondary" th:href="@{/leads(channel='INSTAGRAM')}"><i class="bi bi-instagram me-1"></i>Instagram</a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Results -->
+    <div class="card table-card">
+        <div class="card-header bg-white d-flex flex-wrap justify-content-between align-items-center gap-2 py-3">
+            <div>
+                <span class="fw-semibold" th:text="${result.total} + ' ' + (${result.total == 1} ? 'conversation' : 'conversations')">0 conversations</span>
+                <span class="text-secondary small ms-1" th:if="${filter.active()}">matching filters</span>
+            </div>
+            <a class="btn btn-sm btn-outline-clay"
+               th:href="@{/leads/export.csv(status=${filter.status},persona=${filter.persona},intent=${filter.intent},channel=${filter.channel},followUp=${filter.followUp},q=${filter.q},from=${filter.from},to=${filter.to},sort=${filter.sort})}">
+                <i class="bi bi-download me-1"></i>Export CSV</a>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-hover table-leads mb-0">
+                <thead class="table-light">
+                <tr>
+                    <th scope="col">Visitor</th>
+                    <th scope="col">City</th>
+                    <th scope="col">Requirement</th>
+                    <th scope="col">Persona</th>
+                    <th scope="col">Intent</th>
+                    <th scope="col">Status</th>
+                    <th scope="col" class="text-center">Channel</th>
+                    <th scope="col">Last activity</th>
+                </tr>
+                </thead>
+                <tbody>
+                <tr th:if="${result.rows.isEmpty()}">
+                    <td colspan="8" class="text-center text-secondary py-5">
+                        <i class="bi bi-inbox fs-2 d-block mb-2"></i>No conversations match these filters.</td>
+                </tr>
+                <tr th:each="r : ${result.rows}" th:classappend="${r.needsFollowUp()} ? 'follow-up'"
+                    th:attr="data-href=@{/leads/{id}(id=${r.conversationId})}">
+                    <td>
+                        <a class="fw-semibold text-decoration-none text-body" th:href="@{/leads/{id}(id=${r.conversationId})}"
+                           th:text="${r.name != null ? r.name : 'Anonymous visitor'}">Name</a>
+                        <span class="badge text-bg-danger ms-1" th:if="${r.needsFollowUp()}" title="Handoff requested, not yet handled">Follow up</span>
+                        <span class="badge text-bg-info ms-1" th:if="${r.forwardedAt != null}" title="Transferred to a SalesIQ operator"><i class="bi bi-headset"></i></span>
+                        <div class="small text-secondary">
+                            <span th:if="${r.phone != null}"><i class="bi bi-telephone me-1"></i><span th:text="${r.phone}">phone</span></span>
+                            <span th:if="${r.phone == null and r.email != null}"><i class="bi bi-envelope me-1"></i><span th:text="${r.email}">email</span></span>
+                            <span th:if="${r.phone == null and r.email == null}" class="fst-italic">No contact yet</span>
+                        </div>
+                    </td>
+                    <td th:text="${r.city != null ? r.city : '—'}">City</td>
+                    <td style="max-width: 280px">
+                        <div class="text-truncate-2 small" th:if="${r.requirement() != null}" th:text="${r.requirement()}"></div>
+                        <div class="small text-secondary text-truncate" th:if="${r.requirement() == null}"
+                             th:text="${r.lastVisitorMessage != null ? '“' + r.lastVisitorMessage + '”' : '—'}">last message</div>
+                    </td>
+                    <td class="small"><span th:replace="~{fragments :: label(${r.persona})}"></span></td>
+                    <td class="small"><span th:replace="~{fragments :: label(${r.intent})}"></span></td>
+                    <td><span th:replace="~{fragments :: statusBadge(${r.status})}"></span></td>
+                    <td class="text-center fs-5"><i th:replace="~{fragments :: channelIcon(${r.channel})}"></i></td>
+                    <td class="small text-nowrap">
+                        <span th:text="${#temporals.format(r.updatedAt, 'dd MMM, HH:mm')}">date</span>
+                        <div class="text-secondary" th:text="${r.messageCount} + ' messages'">n messages</div>
+                    </td>
+                </tr>
+                </tbody>
+            </table>
+        </div>
+        <div class="card-footer bg-white d-flex justify-content-between align-items-center py-3" th:if="${result.pages() > 1}">
+            <span class="small text-secondary" th:text="'Page ' + ${result.page} + ' of ' + ${result.pages()}">Page 1 of 1</span>
+            <nav aria-label="Lead pages">
+                <ul class="pagination pagination-sm mb-0">
+                    <li class="page-item" th:classappend="${result.page <= 1} ? 'disabled'">
+                        <a class="page-link" th:href="@{/leads(status=${filter.status},persona=${filter.persona},intent=${filter.intent},channel=${filter.channel},followUp=${filter.followUp},q=${filter.q},from=${filter.from},to=${filter.to},sort=${filter.sort},page=${result.page - 1})}">Previous</a>
+                    </li>
+                    <li class="page-item" th:classappend="${result.page >= result.pages()} ? 'disabled'">
+                        <a class="page-link" th:href="@{/leads(status=${filter.status},persona=${filter.persona},intent=${filter.intent},channel=${filter.channel},followUp=${filter.followUp},q=${filter.q},from=${filter.from},to=${filter.to},sort=${filter.sort},page=${result.page + 1})}">Next</a>
+                    </li>
+                </ul>
+            </nav>
+        </div>
+    </div>
+</main>
+
+<script th:replace="~{fragments :: bootstrapJs}"></script>
+<script>
+    // Whole row opens the lead (links inside still work normally).
+    document.querySelectorAll("tr[data-href]").forEach(function (row) {
+        row.addEventListener("click", function (e) {
+            if (e.target.closest("a, button")) return;
+            window.location.href = row.getAttribute("data-href");
+        });
+    });
+    // Filters apply as soon as a dropdown changes.
+    document.querySelectorAll("#filterForm select").forEach(function (s) {
+        s.addEventListener("change", function () { s.form.submit(); });
+    });
+</script>
+</body>
+</html>

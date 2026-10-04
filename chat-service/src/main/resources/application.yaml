@@ -55,12 +55,15 @@ retrieval:
 operator:
   username: ${OPERATOR_USERNAME:operator}
   password: ${OPERATOR_PASSWORD:} # no default: without it nobody can log in
+  time-zone: Asia/Kolkata # timestamps in the lead console
 
 chat:
   history-size: 20 # previous messages sent to the model each turn
   warm-up: true # one search + one tiny chat call at startup, so the first visitor's reply is not slow
 
 salesiq:
+  # SalesIQ widget embed code for the demo website (bottom right); empty = no widget.
+  widget-code: ${SALESIQ_WIDGET_CODE:siq0749a3ca7ec1db8b9bb67400ae77afeec0a0841a625e72562724dcd20bf3d650}
   # Paste the public key(s) from SalesIQ > Zobot > Webhook > "Secure your webhook" (PEM or Base64; up to two).
   # Empty = signatures not checked (local testing only).
   public-keys: ${SALESIQ_PUBLIC_KEYS:}

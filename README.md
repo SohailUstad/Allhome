@@ -76,6 +76,17 @@ Every request gets an `X-Request-Id`. The flow log (`logs/chat-service.jsonl`, l
 prompt and model response with that id and the conversation id. It contains personal data; `logging.level.flow: OFF`
 turns it off.
 
+## Demo website and lead console
+
+- `/`: public demo website with the Zoho SalesIQ widget (bottom right, `SALESIQ_WIDGET_CODE`) and the service's own
+  direct chat panel (bottom left, calls `POST /api/chat`).
+- `/leads`: the lead store for sales, behind the operator login (form login in the browser, HTTP Basic for scripts).
+  Lead list with filters and status KPIs, lead detail with the full transcript, persona correction, a "handled"
+  marker for follow-ups, and CSV export (`/leads/export.csv`, same filters).
+
+A lead is `QUALIFIED` once name, phone, city, persona and requirement are known, `ENGAGED` with any detail, `NEW`
+otherwise.
+
 ## Zoho SalesIQ (website chat and Instagram DM)
 
 SalesIQ is the channel layer; the agent runs here. Configure a Zobot with a **webhook** pointing at

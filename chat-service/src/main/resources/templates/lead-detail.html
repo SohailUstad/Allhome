@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments :: head('Lead · ColourCoats')}"></head>
+<body>
+<nav th:replace="~{fragments :: operatorNav('leads')}"></nav>
+
+<main class="container-fluid px-3 px-lg-4 py-4">
+    <a class="small text-decoration-none" th:href="@{/leads}"><i class="bi bi-arrow-left me-1"></i>All leads</a>
+
+    <div class="alert alert-success alert-dismissible fade show mt-3 py-2" th:if="${notice}" role="status">
+        <span th:text="${notice}">Saved.</span>
+        <button type="button" class="btn-close py-2" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+
+    <!-- Header -->
+    <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mt-3 mb-4">
+        <div>
+            <h1 class="h2 mb-1">
+                <span th:text="${lead.name != null ? lead.name : 'Anonymous visitor'}">Name</span>
+                <i class="ms-1 fs-4" th:replace="~{fragments :: channelIcon(${lead.channel})}"></i>
+            </h1>
+            <div class="d-flex flex-wrap gap-2 align-items-center">
+                <span th:replace="~{fragments :: statusBadge(${lead.status})}"></span>
+                <span class="badge rounded-pill text-bg-light border"><i class="bi bi-person me-1"></i><span th:replace="~{fragments :: label(${lead.persona})}"></span></span>
+                <span class="badge rounded-pill text-bg-light border"><i class="bi bi-compass me-1"></i><span th:replace="~{fragments :: label(${lead.intent})}"></span></span>
+                <span class="badge rounded-pill text-bg-danger" th:if="${lead.needsFollowUp()}"><i class="bi bi-telephone-outbound me-1"></i>Needs follow-up</span>
+                <span class="badge rounded-pill text-bg-success" th:if="${lead.handledAt != null}"><i class="bi bi-check2 me-1"></i>Handled</span>
+                <span class="badge rounded-pill text-bg-info" th:if="${lead.forwardedAt != null}"
+                      th:title="'Transferred ' + ${#temporals.format(lead.forwardedAt, 'dd MMM, HH:mm')} + '; the AI no longer answers this chat'">
+                    <i class="bi bi-headset me-1"></i>Transferred to SalesIQ operator</span>
+            </div>
+        </div>
+        <div class="d-flex flex-wrap gap-2">
+            <a class="btn btn-outline-secondary" th:if="${lead.phone != null}" th:href="'tel:' + ${lead.phone}"><i class="bi bi-telephone me-1"></i>Call</a>
+            <a class="btn btn-outline-success" th:if="${whatsapp != null}" th:href="'https://wa.me/' + ${whatsapp}" target="_blank" rel="noopener"><i class="bi bi-whatsapp me-1"></i>WhatsApp</a>
+            <a class="btn btn-outline-secondary" th:if="${lead.email != null}" th:href="'mailto:' + ${lead.email}"><i class="bi bi-envelope me-1"></i>Email</a>
+            <form th:action="@{/leads/{id}/handled(id=${lead.conversationId})}" method="post" class="m-0" th:if="${lead.handoffRequestedAt != null}">
+                <button class="btn" type="submit" th:classappend="${lead.handledAt == null} ? 'btn-clay' : 'btn-outline-secondary'">
+                    <i class="bi me-1" th:classappend="${lead.handledAt == null} ? 'bi-check2-circle' : 'bi-arrow-counterclockwise'"></i>
+                    <span th:text="${lead.handledAt == null} ? 'Mark as handled' : 'Reopen follow-up'">Mark as handled</span>
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <div class="row g-4">
+        <!-- Lead profile -->
+        <div class="col-lg-5 col-xl-4">
+            <div class="card detail-card mb-4 border-start border-4 border-danger" th:if="${lead.handoffRequestedAt != null}">
+                <div class="card-body">
+                    <div class="field-label mb-1"><i class="bi bi-flag me-1"></i>Handoff reason</div>
+                    <p class="mb-2" th:text="${lead.handoffReason != null ? lead.handoffReason : 'Not recorded'}">reason</p>
+                    <div class="small text-secondary">
+                        Requested <span th:text="${#temporals.format(lead.handoffRequestedAt, 'dd MMM yyyy, HH:mm')}">date</span>
+                        <span th:if="${lead.handledAt != null}"> · handled <span th:text="${#temporals.format(lead.handledAt, 'dd MMM yyyy, HH:mm')}">date</span></span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card detail-card mb-4">
+                <div class="card-body">
+                    <h2 class="h5 mb-3">Qualification</h2>
+                    <div th:if="${lead.missingMinimum().isEmpty()}" class="alert alert-success py-2 small mb-3">
+                        <i class="bi bi-patch-check me-1"></i>All minimum details captured.</div>
+                    <div th:unless="${lead.missingMinimum().isEmpty()}" class="alert alert-warning py-2 small mb-3">
+                        <i class="bi bi-exclamation-circle me-1"></i>Still needed:
+                        <span th:text="${#strings.listJoin(lead.missingMinimum(), ', ')}">Name</span></div>
+                    <dl class="row mb-0 small">
+                        <dt class="col-5 field-label">Name</dt><dd class="col-7 field-value" th:text="${lead.name ?: '—'}" th:classappend="${lead.name == null} ? 'missing'"></dd>
+                        <dt class="col-5 field-label">Contact number</dt><dd class="col-7 field-value" th:text="${lead.phone ?: '—'}" th:classappend="${lead.phone == null} ? 'missing'"></dd>
+                        <dt class="col-5 field-label">Email</dt><dd class="col-7 field-value" th:text="${lead.email ?: '—'}"></dd>
+                        <dt class="col-5 field-label">City</dt><dd class="col-7 field-value" th:text="${lead.city ?: '—'}" th:classappend="${lead.city == null} ? 'missing'"></dd>
+                        <dt class="col-5 field-label">Persona</dt>
+                        <dd class="col-7 field-value">
+                            <form th:action="@{/leads/{id}/persona(id=${lead.conversationId})}" method="post" class="d-flex gap-1 m-0">
+                                <label class="visually-hidden" for="personaSelect">Persona</label>
+                                <select class="form-select form-select-sm" id="personaSelect" name="persona"
+                                        th:classappend="${lead.persona == 'UNKNOWN'} ? 'border-danger'">
+                                    <option value="" th:if="${lead.persona == 'UNKNOWN'}" selected disabled>Unknown – choose…</option>
+                                    <option th:each="p : ${personas}" th:value="${p}" th:selected="${p == lead.persona}"
+                                            th:text="${#strings.capitalize(#strings.toLowerCase(#strings.replace(p, '_', ' ')))}">Persona</option>
+                                </select>
+                                <button class="btn btn-sm btn-outline-clay" type="submit" title="Save persona"><i class="bi bi-check2"></i></button>
+                            </form>
+                        </dd>
+                        <dt class="col-5 field-label">Requirement</dt><dd class="col-7 field-value" th:text="${lead.requirement() ?: '—'}" th:classappend="${lead.requirement() == null} ? 'missing'"></dd>
+                    </dl>
+                </div>
+            </div>
+
+            <div class="card detail-card mb-4">
+                <div class="card-body">
+                    <h2 class="h5 mb-3">Project</h2>
+                    <dl class="row mb-0 small">
+                        <dt class="col-5 field-label">Project type</dt><dd class="col-7 field-value" th:text="${lead.projectType ?: '—'}"></dd>
+                        <dt class="col-5 field-label">Spaces</dt><dd class="col-7 field-value" th:text="${lead.spaces ?: '—'}"></dd>
+                        <dt class="col-5 field-label">Finish interest</dt><dd class="col-7 field-value" th:text="${lead.finishInterest ?: '—'}"></dd>
+                        <dt class="col-5 field-label">Size</dt><dd class="col-7 field-value" th:text="${lead.areaSize ?: '—'}"></dd>
+                        <dt class="col-5 field-label">Timeline</dt><dd class="col-7 field-value" th:text="${lead.timeline ?: '—'}"></dd>
+                        <dt class="col-5 field-label">Budget</dt><dd class="col-7 field-value" th:text="${lead.budget ?: '—'}"></dd>
+                        <dt class="col-5 field-label">Callback time</dt><dd class="col-7 field-value" th:text="${lead.callbackTime ?: '—'}"></dd>
+                    </dl>
+                </div>
+            </div>
+
+            <div class="card detail-card">
+                <div class="card-body small">
+                    <h2 class="h5 mb-3">Conversation</h2>
+                    <dl class="row mb-0">
+                        <dt class="col-5 field-label">Channel</dt>
+                        <dd class="col-7" th:text="${lead.channel == 'ZOHO_SALESIQ' ? 'SalesIQ website chat' : (lead.channel == 'WEB_CHAT' ? 'Direct web chat' : 'Instagram')}"></dd>
+                        <dt class="col-5 field-label">Started</dt><dd class="col-7" th:text="${#temporals.format(lead.createdAt, 'dd MMM yyyy, HH:mm')}"></dd>
+                        <dt class="col-5 field-label">Last activity</dt><dd class="col-7" th:text="${#temporals.format(lead.updatedAt, 'dd MMM yyyy, HH:mm')}"></dd>
+                        <dt class="col-5 field-label">Messages</dt><dd class="col-7" th:text="${lead.messageCount}"></dd>
+                        <dt class="col-5 field-label">ID</dt><dd class="col-7 text-break font-monospace" th:text="${lead.conversationId}"></dd>
+                    </dl>
+                </div>
+            </div>
+        </div>
+
+        <!-- Transcript -->
+        <div class="col-lg-7 col-xl-8">
+            <div class="card detail-card h-100">
+                <div class="card-body">
+                    <h2 class="h5 mb-3">Transcript</h2>
+                    <div class="transcript" id="transcript">
+                        <p class="text-secondary text-center my-4" th:if="${messages.isEmpty()}">No messages.</p>
+                        <th:block th:each="m : ${messages}">
+                            <div class="bubble" th:classappend="${m.role == 'USER'} ? 'me' : 'bot'">
+                                <div class="msg-text" th:text="${m.content}">message</div>
+                                <div class="mt-1 small" th:classappend="${m.role == 'USER'} ? 'text-white-50' : 'text-secondary'">
+                                    <span th:text="${#temporals.format(m.createdAt, 'dd MMM, HH:mm')}">time</span>
+                                    <span th:if="${m.handoff}" class="badge text-bg-danger ms-1"><i class="bi bi-flag"></i> handoff</span>
+                                    <a th:if="${!m.sources.isEmpty()}" class="ms-1 text-secondary" data-bs-toggle="collapse"
+                                       th:href="'#src-' + ${mStat.index}" role="button" aria-expanded="false"
+                                       th:text="${m.sources.size()} + ' sources'">sources</a>
+                                </div>
+                                <div class="collapse mt-2" th:id="'src-' + ${mStat.index}" th:if="${!m.sources.isEmpty()}">
+                                    <ul class="list-unstyled small mb-0">
+                                        <li th:each="s : ${m.sources}" class="text-truncate">
+                                            <a th:href="${s.url}" target="_blank" rel="noopener noreferrer" th:text="${s.section != null ? s.section : s.url}">source</a>
+                                        </li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </th:block>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</main>
+
+<script th:replace="~{fragments :: bootstrapJs}"></script>
+<script>
+    var t = document.getElementById("transcript");
+    if (t) t.scrollTop = t.scrollHeight;
+</script>
+</body>
+</html>
