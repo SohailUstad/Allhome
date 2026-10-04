@@ -45,7 +45,8 @@ ingestion:
 
 retrieval:
   top-k: 6 # chunks per question
-  min-similarity: 0.3 # cosine similarity below which a chunk is considered unrelated
+  candidates: 20 # results each search (vector, keyword) contributes before they are fused
+  min-similarity: 0.3 # cosine similarity below which a vector match is considered unrelated
 
 operator:
   username: ${OPERATOR_USERNAME:operator}
