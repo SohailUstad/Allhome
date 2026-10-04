@@ -12,7 +12,7 @@ public final class PromptExceptions {
 	/** 404. */
 	public static class NotFound extends RuntimeException {
 
-		NotFound(UUID id) {
+		public NotFound(UUID id) {
 			super("Prompt version " + id + " does not exist");
 		}
 
@@ -21,7 +21,7 @@ public final class PromptExceptions {
 	/** 400: the change breaks a rule (locked section, empty section, too long, nothing changed). */
 	public static class RuleViolation extends RuntimeException {
 
-		RuleViolation(String message) {
+		public RuleViolation(String message) {
 			super(message);
 		}
 
@@ -32,7 +32,7 @@ public final class PromptExceptions {
 
 		private final List<String> sections;
 
-		ConfirmationRequired(List<String> sections) {
+		public ConfirmationRequired(List<String> sections) {
 			super("These sections are protected; confirm that you want to change them: " + String.join(", ", sections));
 			this.sections = List.copyOf(sections);
 		}
@@ -46,7 +46,7 @@ public final class PromptExceptions {
 	/** 409: the version is not in a state that allows this (for example the active version changed meanwhile). */
 	public static class Conflict extends RuntimeException {
 
-		Conflict(String message) {
+		public Conflict(String message) {
 			super(message);
 		}
 

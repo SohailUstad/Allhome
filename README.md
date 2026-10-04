@@ -171,6 +171,27 @@ How the agent is configured and changed:
 
 Every release is a git tag; the deployed commit is shown at `/actuator/info`.
 
+**Changing the prompt with AI.** On the **Agent prompt** page the operator can describe a behaviour change in plain
+language ("with architects, use precise finish terms") instead of editing the text:
+
+1. Choose a section (or let the AI choose), a model and, for reasoning models, the reasoning effort. The models on
+   offer are configured under `prompt-editor.models`; models the OpenAI key cannot use are shown disabled. Standard
+   models run at temperature 0, reasoning models with the chosen effort. Visitors are always answered by the chat
+   model; the editor model only proposes prompt changes.
+2. The editor model follows its own fixed instructions (`prompts/prompt-editor.md`, in git) and answers with JSON: the
+   changed sections only (complete new text), a reason for each, conflicts with other sections, or a question back.
+   It refuses ColourCoats facts (they belong in the knowledge base) and requests that need code.
+3. The code checks the proposal: changes to locked or unknown sections, empty sections and changes that change
+   nothing are dropped and reported. The page shows a line diff for each changed section.
+4. The operator accepts it into a draft (protected sections need a confirmation), refines it with feedback (the
+   previous proposal goes back to the model), or discards it. A proposal made for a version that has changed since
+   can no longer be accepted.
+5. The draft is activated as usual. Every request is stored in `prompt_edit` with the instruction, model, effort,
+   proposal, token counts (including reasoning tokens), duration, outcome and the draft it produced.
+
+The request waits for the model (up to `prompt-editor.timeout`, 170 s): on Cloud Run the CPU is only allocated while a
+request runs, so a background job would stall.
+
 ## Lead qualification
 
 **Captured fields:** name, phone (WhatsApp ok), email, city, project type, spaces, finish interest, area size,
@@ -258,6 +279,7 @@ on) and at least 85% of all checks must pass; otherwise the build fails. A free 
 | `POST /api/prompts` `{"sections":{"<key>":"<text>"}, "note", "confirmProtected"}`, `PATCH /api/prompts/{id}` | Operator | Start a draft from the active version / change a draft: `400` if a section is locked, empty, or protected without confirmation |
 | `POST /api/prompts/{id}/activate`, `POST /api/prompts/{id}/discard` | Operator | Make a version active, also for rollback (`409` if the active version changed since the draft was started) / throw a draft away |
 | `/`, `/leads`, `/leads/export.csv`, `/prompts` | Public / operator | Demo site, lead console, CSV export, agent prompt editor |
+| `POST /prompts/{versionId}/ai-edits`, `POST /prompts/ai-edits/{id}/refine` (JSON), `.../accept`, `.../discard` | Operator (console session, CSRF) | AI prompt editor: ask, refine, accept into a draft, discard |
 | `/actuator/health`, `/actuator/info` | Public | Health, running version |
 
 The operator logs in with `OPERATOR_USERNAME` / `OPERATOR_PASSWORD` (form login in the browser, HTTP Basic for
@@ -292,6 +314,9 @@ pass. Releases are git tags; the deployed image is tagged with the release and t
   transfer; some replies exceed 45 words; long English history can pull a Hinglish reply into English.
 - **Prompt changes are not reviewed in a pull request** once the prompt lives in the database; drafts, evals on a
   draft and one-call rollback take the place of that review.
+- **AI prompt editor:** the OpenAI client retries a failed call (up to 3 times), so a failing request can take longer
+  than `prompt-editor.timeout`; requests are not rate-limited per operator, and the editor's proposals are only as
+  good as the chosen model: the diff review, the draft and evals are the safety net.
 - **Knowledge refresh is manual** (crawl, package, upload).
 - **Demo-sized infrastructure:** one Cloud Run instance, smallest Cloud SQL tier without backups, one operator
   account, no rate limiting.

@@ -43,7 +43,7 @@ class PromptDocumentTests {
 
 	@Test
 	void windowsLineEndingsAndByteOrderMarkAreRemoved() {
-		List<PromptSection> sections = PromptDocument.parse("﻿Intro\r\n\r\n## One\r\nline 1\r\nline 2\r\n");
+		List<PromptSection> sections = PromptDocument.parse("\uFEFFIntro\r\n\r\n## One\r\nline 1\r\nline 2\r\n");
 
 		assertThat(sections).containsExactly(new PromptSection("role", null, "Intro"),
 				new PromptSection("one", "One", "line 1\nline 2"));
