@@ -1,7 +1,7 @@
 package com.allhome.colourcoats.salesiq;
 
 import com.allhome.colourcoats.chat.*;
-import com.allhome.colourcoats.salesiq.*;
+import com.allhome.colourcoats.retrieval.KnowledgeSearch;
 import java.util.List;
 import java.util.concurrent.*;
 import org.junit.jupiter.api.Test;
@@ -9,10 +9,10 @@ import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.model.*;
 import org.springframework.ai.chat.prompt.*;
-import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.transaction.support.TransactionOperations;
 import tools.jackson.databind.json.JsonMapper;
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -37,8 +37,8 @@ class SalesIqLateCompletionTests {
             }
             return new ChatResponse(List.of(new Generation(new AssistantMessage("{\"reply\":\"late answer\",\"handoff\":false}"))));
         });
-        var service = new ChatService(ChatClient.builder(model), mock(VectorStore.class), mock(KeywordRetriever.class), repository,
-                new ByteArrayResource("test system".getBytes()), 20, 6, 0.3, 3, true, "TRANSFER") {
+        var service = new ChatService(ChatClient.builder(model), mock(KnowledgeSearch.class), repository,
+                TransactionOperations.withoutTransaction(), new ByteArrayResource("test system".getBytes()), 20, true, "TRANSFER") {
             @Override public Reply chat(java.util.UUID id, String message, Channel channel) {
                 try { return super.chat(id, message, channel); }
                 finally { workerFinished.countDown(); }

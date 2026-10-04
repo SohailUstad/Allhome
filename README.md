@@ -76,6 +76,20 @@ Every request gets an `X-Request-Id`. The flow log (`logs/chat-service.jsonl`, l
 prompt and model response with that id and the conversation id. It contains personal data; `logging.level.flow: OFF`
 turns it off.
 
+## Zoho SalesIQ (website chat and Instagram DM)
+
+SalesIQ is the channel layer; the agent runs here. Configure a Zobot with a **webhook** pointing at
+`https://<host>/api/salesiq/webhook` (public; secured by SalesIQ's signature, not by login). The same bot serves the
+website widget and Instagram DMs connected in SalesIQ; the webhook tells them apart from the visitor's `channel`.
+
+- Every call is answered within `salesiq.response-deadline-ms` (3.8 s; SalesIQ allows 5 s). If the agent is not ready,
+  the visitor gets a holding message and the conversation is queued for a human.
+- On handoff the chat is forwarded to a SalesIQ operator (`salesiq.forward-on-handoff`, optional
+  `SALESIQ_DEPARTMENT_ID`); the AI does not answer that conversation again.
+- Set `SALESIQ_PUBLIC_KEYS` to the key from SalesIQ > Zobot > Webhook > "Secure your webhook". Without it, signatures
+  are not checked (local testing only).
+- Messages and replies are in the flow log (`salesiq.request` / `salesiq.response`) with the request id.
+
 ## Tests
 
 ```

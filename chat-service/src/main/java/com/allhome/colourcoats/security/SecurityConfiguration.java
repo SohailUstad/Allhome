@@ -40,6 +40,8 @@ class SecurityConfiguration {
 				.requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
 				.requestMatchers(HttpMethod.GET, "/api/chat/*/messages").hasRole(OPERATOR_ROLE)
 				.requestMatchers(HttpMethod.POST, "/api/chat").permitAll()
+				// Authenticated by SalesIQ's RSA signature (salesiq.public-keys), not by login.
+				.requestMatchers(HttpMethod.POST, "/api/salesiq/webhook").permitAll()
 				.requestMatchers("/api/ingestions", "/api/ingestions/**", "/api/search").hasRole(OPERATOR_ROLE)
 				.anyRequest().authenticated())
 			.httpBasic(withDefaults())

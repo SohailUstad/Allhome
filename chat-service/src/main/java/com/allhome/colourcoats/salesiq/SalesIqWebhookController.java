@@ -4,7 +4,8 @@ import com.allhome.colourcoats.chat.Channel;
 import com.allhome.colourcoats.chat.ChatRepository;
 import com.allhome.colourcoats.chat.ChatService;
 import com.allhome.colourcoats.chat.ModelAnswer;
-import com.allhome.colourcoats.flowlog.*;
+import com.allhome.colourcoats.flowlog.FlowLog;
+import com.allhome.colourcoats.flowlog.TraceContext;
 import org.springframework.beans.factory.annotation.Autowired;
 import jakarta.annotation.PreDestroy;
 import java.nio.charset.StandardCharsets;
@@ -14,7 +15,6 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.regex.Pattern;
@@ -25,20 +25,21 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import tools.jackson.databind.JsonNode;
+import org.springframework.transaction.support.TransactionOperations;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
  * Zoho SalesIQ Zobot webhook (request/response format 2.0). Register
  * {@code https://<public-host>/api/salesiq/webhook} as the bot's webhook URL.
  *
- * SalesIQ waits at most 5 seconds and the async "pending" action is not supported on Instagram, so every
- * reply is time-boxed: if the pipeline misses the deadline (or fails), the visitor gets a holding message,
+ * SalesIQ waits at most 5 seconds, so every reply is time-boxed: if the pipeline misses the deadline (or fails), the visitor gets a holding message,
  * the conversation is queued for a human, and SalesIQ always receives a valid 200 response.
  */
 @RestController
 @RequestMapping("/api/salesiq/webhook")
 public class SalesIqWebhookController {
     // SalesIQ fills anonymous visitors with placeholder names such as "Visitor 51234".
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(SalesIqWebhookController.class);
     private static final Pattern PLACEHOLDER_NAME = Pattern.compile("(?i)^(visitor|guest)\\b.*");
 
     private final ChatService chatService;
@@ -54,30 +55,13 @@ public class SalesIqWebhookController {
     private final String contactRequest;
     private final String transferMessage;
     private final String busyMessage;
-    private Telemetry telemetry = Telemetry.local();
-    private RunJournal journal = RunJournal.transientJournal();
+    private TransactionOperations transaction = TransactionOperations.withoutTransaction();
 
-    @Autowired public void observability(Telemetry telemetry, RunJournal journal) {
-        this.telemetry = telemetry;
-        this.journal = journal;
+    /** Saves that belong together (reply + handoff + forward marker) commit together. */
+    @Autowired public void transactions(TransactionOperations transaction) {
+        this.transaction = transaction;
     }
     @PreDestroy public void stop() { executor.shutdownNow(); }
-
-    // Async ("pending") replies for slow turns; null or unconfigured client = always answer synchronously.
-    private SalesIqCallbackClient callbacks;
-    private long pendingAfterMs = 2500;
-    private long asyncMaxWaitMs = 90000;
-    private String pendingMessage = "";
-
-    @Autowired public void async(SalesIqCallbackClient callbacks,
-                                 @Value("${salesiq.async.pending-after-ms:2500}") long pendingAfterMs,
-                                 @Value("${salesiq.async.max-wait-ms:90000}") long asyncMaxWaitMs,
-                                 @Value("${salesiq.async.pending-message:}") String pendingMessage) {
-        this.callbacks = callbacks;
-        this.pendingAfterMs = pendingAfterMs;
-        this.asyncMaxWaitMs = asyncMaxWaitMs;
-        this.pendingMessage = pendingMessage;
-    }
 
     public SalesIqWebhookController(ChatService chatService, ChatRepository repository, SalesIqSignatureVerifier verifier,
                                     JsonMapper json,
@@ -115,10 +99,10 @@ public class SalesIqWebhookController {
             try {
                 var response = respond(body, signature);
                 FlowLog.log("salesiq.response", "http_status", response.getStatusCode().value(),
-                        "payload", response.getBody(), "duration_ms", Telemetry.elapsed(started));
+                        "payload", response.getBody(), "duration_ms", elapsedMs(started));
                 return response;
             } catch (RuntimeException e) {
-                FlowLog.log("salesiq.response", "error", e.toString(), "duration_ms", Telemetry.elapsed(started));
+                FlowLog.log("salesiq.response", "error", e.toString(), "duration_ms", elapsedMs(started));
                 throw e;
             }
         }
@@ -144,7 +128,6 @@ public class SalesIqWebhookController {
 
     private ResponseEntity<Map<String, Object>> respond(String body, String signature) {
         if (verifier.enabled() && !verifier.verify(body, signature)) {
-            telemetry.warning("salesiq.signature.rejected");
             TraceContext.outcome("rejected");
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).contentType(MediaType.APPLICATION_JSON)
                     .body(reply(List.of("Unauthorized")));
@@ -153,13 +136,11 @@ public class SalesIqWebhookController {
         try {
             request = body.isBlank() ? json.createObjectNode() : json.readTree(body);
         } catch (RuntimeException e) {
-            telemetry.warning("salesiq.payload.invalid");
             TraceContext.outcome("invalid_payload");
             return ok(reply(List.of(opener)));
         }
         String handler = text(request.path("handler"));
         if (!"message".equals(handler)) {
-            telemetry.event("salesiq.greeting.selected");
             TraceContext.outcome("greeting");
             // "trigger" (visitor landed), "context", SalesIQ's validation ping, or anything unknown: greet.
             return ok(reply(List.of(opener)));
@@ -183,11 +164,9 @@ public class SalesIqWebhookController {
         String message = text(request.path("message").path("text"));
         if (message == null) {
             TraceContext.outcome("unsupported_message");
-            telemetry.event("salesiq.message.unsupported");
             return reply(List.of("I can only read text messages at the moment. Could you type your question?"));
         }
         if (message.length() > 2000) {
-            telemetry.event("salesiq.message.truncated", "original_length", message.length(), "retained_length", 2000);
             message = message.substring(0, 2000);
         }
 
@@ -195,10 +174,6 @@ public class SalesIqWebhookController {
         Channel channel = "instagram".equalsIgnoreCase(text(visitor.path("channel"))) ? Channel.INSTAGRAM : Channel.ZOHO_SALESIQ;
         var context = TraceContext.current();
         context.bind(conversationId, channel.name());
-        // This is a delivery reference, not a guaranteed logical message ID: correlate redeliveries without suppressing turns.
-        String external = text(request.path("request").path("id"));
-        if (external != null) context.externalEventHash = Telemetry.hash(conversationId + ":" + external);
-        journal.begin();
         repository.touchConversation(conversationId, channel);
         seedLeadFromVisitor(conversationId, visitor);
         repository.saveUserMessage(conversationId, message);
@@ -206,105 +181,44 @@ public class SalesIqWebhookController {
         // Once a chat is handed to a human, the AI never answers it again. SalesIQ only calls the bot again if no
         // operator took the chat, so let SalesIQ's own "operators busy / leave a message" flow handle it.
         if (forwardOnHandoff && repository.isForwarded(conversationId)) {
-            journal.finish("operator_busy", () -> {
+            transaction.executeWithoutResult(status -> {
                 repository.saveAssistantMessage(conversationId, busyMessage, true, List.of(), null, null, null);
                 repository.requestHandoff(conversationId, "Visitor wrote again after the transfer; no operator picked up the chat.");
             });
             TraceContext.outcome("operator_busy");
-            telemetry.event("salesiq.operator_busy");
             return action("operator_busy", busyMessage);
         }
 
         context.completion.defer();
-        if (Telemetry.elapsed(started) >= deadlineMs) {
+        if (elapsedMs(started) >= deadlineMs) {
             context.completion.abandon();
-            telemetry.warning("salesiq.deadline.exceeded", "deadline_ms", deadlineMs, "worker_started", false);
             return fallback(conversationId, "Bot reply exceeded the SalesIQ time limit", "fallback_timeout");
         }
         String finalMessage = message;
-        var future = executor.submit(telemetry.wrap(() -> {
-            try {
-                return chatService.chat(conversationId, finalMessage, channel);
-            } finally {
-                telemetry.event("salesiq.worker.finished", "abandoned", context.completion.abandoned(),
-                        "interrupted", Thread.currentThread().isInterrupted());
-                if (context.completion.abandoned()) telemetry.warning("salesiq.worker.late_completion");
-            }
-        }));
-        // Website chats can be answered later through SalesIQ's callback API (not supported on Instagram).
-        boolean async = callbacks != null && callbacks.enabled() && channel == Channel.ZOHO_SALESIQ && external != null;
-        long waitMs = async ? Math.min(pendingAfterMs, deadlineMs) : deadlineMs;
+        var future = executor.submit(TraceContext.propagate(() -> chatService.chat(conversationId, finalMessage, channel)));
         try {
-            long remaining = waitMs - Telemetry.elapsed(started);
+            long remaining = deadlineMs - elapsedMs(started);
             if (remaining <= 0) throw new TimeoutException();
             var result = future.get(remaining, TimeUnit.MILLISECONDS);
-            journal.atomic(() -> {
+            transaction.executeWithoutResult(status -> {
                 context.completion.accept();
                 if (result.handoff() && forwardOnHandoff) repository.markForwarded(conversationId);
             });
-            telemetry.event("salesiq.reply.prepared", "duration_ms", Telemetry.elapsed(started), "handoff", result.handoff());
             if (result.handoff() && forwardOnHandoff) {
                 return forward(result.reply());
             }
             return reply(List.of(result.reply()));
         } catch (TimeoutException e) {
-            if (async) return pending(future, conversationId, external, started);
             context.completion.abandon();
-            boolean cancellationRequested = future.cancel(true);
-            telemetry.warning("salesiq.deadline.exceeded", "deadline_ms", deadlineMs, "duration_ms", Telemetry.elapsed(started),
-                    "cancellation_requested", cancellationRequested);
+            future.cancel(true);
             return fallback(conversationId, "Bot reply exceeded the SalesIQ time limit", "fallback_timeout");
         } catch (Exception e) {
             context.completion.abandon();
             future.cancel(true);
             if (e instanceof InterruptedException) Thread.currentThread().interrupt();
-            telemetry.failure("salesiq.reply.failed", e);
+            log.warn("SalesIQ reply failed", e);
             return fallback(conversationId, "Bot reply failed (" + rootCause(e) + ")", "fallback_error");
         }
-    }
-
-    /**
-     * Slow turn on the website: tell SalesIQ the reply is "pending" now, keep the worker running, and deliver its
-     * answer (or the usual fallback) through the callback API once it is ready.
-     */
-    private Map<String, Object> pending(Future<ChatService.Reply> future, UUID conversationId, String requestId, long started) {
-        executor.submit(telemetry.wrap(() -> {
-            completeLater(future, conversationId, requestId, started);
-            return null;
-        }));
-        TraceContext.outcome("pending");
-        var response = new LinkedHashMap<String, Object>();
-        response.put("action", "pending");
-        response.put("replies", pendingMessage == null || pendingMessage.isBlank() ? List.of() : List.of(pendingMessage));
-        return response;
-    }
-
-    private void completeLater(Future<ChatService.Reply> future, UUID conversationId, String requestId, long started) {
-        var context = TraceContext.current();
-        Map<String, Object> body;
-        try {
-            var result = future.get(Math.max(asyncMaxWaitMs - Telemetry.elapsed(started), 0), TimeUnit.MILLISECONDS);
-            journal.atomic(() -> {
-                context.completion.accept();
-                if (result.handoff() && forwardOnHandoff) repository.markForwarded(conversationId);
-            });
-            body = result.handoff() && forwardOnHandoff ? forward(result.reply()) : reply(List.of(result.reply()));
-        } catch (TimeoutException e) {
-            context.completion.abandon();
-            future.cancel(true);
-            telemetry.warning("salesiq.async.deadline.exceeded", "max_wait_ms", asyncMaxWaitMs);
-            body = fallback(conversationId, "Bot reply exceeded the async time limit", "fallback_timeout");
-        } catch (Exception e) {
-            context.completion.abandon();
-            future.cancel(true);
-            if (e instanceof InterruptedException) Thread.currentThread().interrupt();
-            telemetry.failure("salesiq.async.reply.failed", e);
-            body = fallback(conversationId, "Bot reply failed (" + rootCause(e) + ")", "fallback_error");
-        }
-        var sent = callbacks.respond(requestId, body);
-        FlowLog.log("salesiq.callback", "salesiq_request_id", requestId, "payload", body,
-                "http_status", sent.status(), "callback_response", sent.body(), "duration_ms", Telemetry.elapsed(started));
-        if (!sent.ok()) telemetry.warning("salesiq.callback.failed", "http_status", sent.status());
     }
 
     /** The visitor is never left without an answer: a human follows up on what the bot could not answer in time. */
@@ -314,19 +228,16 @@ public class SalesIqWebhookController {
         try {
             if (!forwardOnHandoff && repository.findLead(conversationId).phone() == null) message = fallbackMessage + " " + contactRequest;
             String selected = message;
-            journal.finish(outcome, () -> {
+            transaction.executeWithoutResult(status -> {
                 repository.saveAssistantMessage(conversationId, selected, true, List.of(), null, null, null);
                 repository.requestHandoff(conversationId, reason + "; follow up on the visitor's last message.");
                 if (forwardOnHandoff) repository.markForwarded(conversationId);
             });
-            telemetry.event("salesiq.fallback.committed", "outcome", outcome);
         } catch (RuntimeException e) {
-            telemetry.failure("salesiq.fallback.persist_failed", e);
+            log.error("SalesIQ fallback could not be saved", e);
             outcome = "fallback_persistence_failed";
         }
         TraceContext.outcome(outcome);
-        telemetry.count("app.chat.turns", outcome);
-        telemetry.event("salesiq.response.prepared", "outcome", outcome, "action", forwardOnHandoff ? "forward" : "reply");
         return forwardOnHandoff ? forward(message) : reply(List.of(message));
     }
 
@@ -377,6 +288,10 @@ public class SalesIqWebhookController {
         if (node == null || node.isMissingNode() || node.isNull()) return null;
         String value = node.asString("").strip();
         return value.isEmpty() ? null : value;
+    }
+
+    private static long elapsedMs(long startedNanos) {
+        return (System.nanoTime() - startedNanos) / 1_000_000;
     }
 
     private static String rootCause(Throwable e) {

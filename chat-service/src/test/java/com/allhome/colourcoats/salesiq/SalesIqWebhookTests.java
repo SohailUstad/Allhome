@@ -1,8 +1,6 @@
 package com.allhome.colourcoats.salesiq;
 
 import com.allhome.colourcoats.chat.*;
-import com.allhome.colourcoats.ingestion.ApiErrors;
-import com.allhome.colourcoats.salesiq.SalesIqCallbackClient;
 import com.allhome.colourcoats.salesiq.SalesIqSignatureVerifier;
 import com.allhome.colourcoats.salesiq.SalesIqWebhookController;
 import java.nio.charset.StandardCharsets;
@@ -126,52 +124,6 @@ class SalesIqWebhookTests {
         assertThat(System.currentTimeMillis() - start).isLessThan(2000);
         verify(repository).saveAssistantMessage(any(), eq("FALLBACK ASK CONTACT"), eq(true), any(), any(), any(), any());
         verify(repository).requestHandoff(any(), contains("time limit"));
-    }
-
-    MockMvc asyncMvc(SalesIqCallbackClient callbacks, boolean forwardOnHandoff) {
-        when(repository.findLead(any())).thenReturn(Lead.EMPTY);
-        when(callbacks.enabled()).thenReturn(true);
-        var controller = new SalesIqWebhookController(chat, repository, new SalesIqSignatureVerifier(""), JsonMapper.builder().build(),
-                3800, forwardOnHandoff, "", "WELCOME", "FALLBACK", "ASK CONTACT", "TRANSFER", "BUSY");
-        controller.async(callbacks, 200, 5000, "WAIT");
-        return MockMvcBuilders.standaloneSetup(controller).setControllerAdvice(new ApiErrors()).build();
-    }
-
-    @Test void slowWebsiteReplyGoesPendingThenArrivesViaCallback() throws Exception {
-        var callbacks = mock(SalesIqCallbackClient.class);
-        when(callbacks.respond(any(), any())).thenReturn(new SalesIqCallbackClient.Result(200, "{}"));
-        when(chat.chat(any(), any(), any())).thenAnswer(inv -> {
-            Thread.sleep(600);
-            return new ChatService.Reply(UUID.randomUUID(), "Here are some textures.", false, List.of());
-        });
-        asyncMvc(callbacks, true).perform(post("/api/salesiq/webhook").contentType(MediaType.APPLICATION_JSON).content(WEBSITE_MESSAGE))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.action").value("pending"))
-                .andExpect(jsonPath("$.replies[0]").value("WAIT"));
-        @SuppressWarnings("unchecked") ArgumentCaptor<java.util.Map<String, Object>> body = ArgumentCaptor.forClass(java.util.Map.class);
-        verify(callbacks, timeout(3000)).respond(eq("r1"), body.capture());
-        assertThat(body.getValue()).containsEntry("action", "reply").containsEntry("replies", List.of("Here are some textures."));
-        verify(repository, never()).requestHandoff(any(), any()); // a slow answer is no longer a handoff
-    }
-
-    @Test void fastWebsiteReplyStaysSynchronousWithAsyncEnabled() throws Exception {
-        var callbacks = mock(SalesIqCallbackClient.class);
-        when(chat.chat(any(), any(), any())).thenReturn(new ChatService.Reply(UUID.randomUUID(), "quick", false, List.of()));
-        asyncMvc(callbacks, true).perform(post("/api/salesiq/webhook").contentType(MediaType.APPLICATION_JSON).content(WEBSITE_MESSAGE))
-                .andExpect(jsonPath("$.action").value("reply")).andExpect(jsonPath("$.replies[0]").value("quick"));
-        verify(callbacks, never()).respond(any(), any());
-    }
-
-    @Test void instagramNeverGoesPending() throws Exception {
-        var callbacks = mock(SalesIqCallbackClient.class);
-        when(chat.chat(any(), any(), any())).thenAnswer(inv -> {
-            Thread.sleep(600);
-            return new ChatService.Reply(UUID.randomUUID(), "late", false, List.of());
-        });
-        asyncMvc(callbacks, false).perform(post("/api/salesiq/webhook").contentType(MediaType.APPLICATION_JSON)
-                        .content(WEBSITE_MESSAGE.replace("Website", "Instagram")))
-                .andExpect(jsonPath("$.action").value("reply")).andExpect(jsonPath("$.replies[0]").value("late"));
-        verify(callbacks, never()).respond(any(), any());
     }
 
     @Test void botFailureStillAnswersSalesIqWith200() throws Exception {
