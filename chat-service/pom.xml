@@ -10,7 +10,7 @@
 	</parent>
 	<groupId>com.allhome</groupId>
 	<artifactId>chat-service</artifactId>
-	<version>0.1.2</version>
+	<version>0.2.0</version>
 	<name>chat-service</name>
 	<description>ColourCoats consultation assistant: knowledge ingestion, retrieval and chat</description>
 	<properties>
