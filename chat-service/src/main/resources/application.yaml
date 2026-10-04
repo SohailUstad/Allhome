@@ -66,6 +66,33 @@ prompt:
   locked-sections: [input, output] # the code depends on them: input format, reply format, injection rule
   protected-sections: [strict-grounding, persona, intent] # editable only with an explicit confirmation
 
+prompt-editor:
+  # The AI that proposes prompt changes in the console (same OpenAI key; it never answers visitors). The operator picks
+  # one of these models per request; models the key cannot use are shown disabled. Standard models run at temperature
+  # 0; reasoning models take a reasoning effort instead (and no temperature).
+  default-model: gpt-4.1
+  models:
+    - id: gpt-4.1
+      label: GPT-4.1
+      description: fast (10–30 s), careful wording
+    - id: gpt-5-mini
+      label: GPT-5 mini
+      description: reasoning, quicker and cheaper
+      reasoning: true
+      efforts: [low, medium, high]
+    - id: gpt-5
+      label: GPT-5
+      description: reasoning, most careful, slowest and most expensive
+      reasoning: true
+      efforts: [low, medium, high]
+    - id: o3
+      label: o3
+      description: reasoning, careful, slow
+      reasoning: true
+      efforts: [low, medium, high]
+  max-output-tokens: 25000 # includes a reasoning model's hidden reasoning
+  timeout: 170s # one request; stays inside Cloud Run's request timeout
+
 chat:
   history-size: 20 # previous messages sent to the model each turn
   warm-up: true # one search + one tiny chat call at startup, so the first visitor's reply is not slow

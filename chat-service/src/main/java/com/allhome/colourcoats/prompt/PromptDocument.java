@@ -75,9 +75,9 @@ public final class PromptDocument {
 	}
 
 	/** Windows line endings and a byte-order mark would otherwise end up in the prompt. */
-	static String normalise(String text) {
+	public static String normalise(String text) {
 		String value = text == null ? "" : text.replace("\r\n", "\n").replace('\r', '\n');
-		return value.startsWith("﻿") ? value.substring(1) : value;
+		return value.startsWith("\uFEFF") ? value.substring(1) : value;
 	}
 
 	private static PromptSection section(String title, StringBuilder body, Set<String> keys) {

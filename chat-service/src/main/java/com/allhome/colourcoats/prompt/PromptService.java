@@ -266,7 +266,7 @@ public class PromptService implements SystemPrompts {
 	 * Applies section edits after checking every rule: known sections only, locked sections unchanged, protected
 	 * sections only when confirmed, no empty section, and the whole prompt within the size limit.
 	 */
-	List<PromptSection> apply(List<PromptSection> sections, Map<String, String> edits, boolean confirmProtected,
+	public List<PromptSection> apply(List<PromptSection> sections, Map<String, String> edits, boolean confirmProtected,
 			boolean requireChange) {
 		for (String key : edits.keySet()) {
 			if (sections.stream().noneMatch(section -> section.key().equals(key))) {
@@ -317,7 +317,7 @@ public class PromptService implements SystemPrompts {
 		return PromptDocument.normalise(text).strip();
 	}
 
-	static String label(PromptSection section) {
+	public static String label(PromptSection section) {
 		return Objects.requireNonNullElse(section.title(), "Introduction");
 	}
 
