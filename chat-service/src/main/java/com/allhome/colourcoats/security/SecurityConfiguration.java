@@ -5,6 +5,7 @@ import static org.springframework.security.config.Customizer.withDefaults;
 import jakarta.servlet.DispatcherType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -24,6 +25,7 @@ import org.springframework.security.web.SecurityFilterChain;
  * so CSRF protection, which guards cookie-based sessions, is not needed.
  */
 @Configuration(proxyBeanMethods = false)
+@ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET) // evals run without a web server
 class SecurityConfiguration {
 
 	static final String OPERATOR_ROLE = "OPERATOR";

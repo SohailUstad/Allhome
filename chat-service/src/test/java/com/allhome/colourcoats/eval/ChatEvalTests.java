@@ -2,8 +2,9 @@ package com.allhome.colourcoats.eval;
 
 import com.allhome.colourcoats.chat.Channel;
 import com.allhome.colourcoats.chat.ChatService;
-import com.allhome.colourcoats.chat.KeywordRetriever;
 import com.allhome.colourcoats.chat.Lead;
+import com.allhome.colourcoats.retrieval.KnowledgeSearch;
+import com.allhome.colourcoats.retrieval.RetrievalProperties;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -16,12 +17,12 @@ import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.converter.BeanOutputConverter;
-import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.core.io.Resource;
 import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.transaction.support.TransactionOperations;
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.json.JsonMapper;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -38,18 +39,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE)
 class ChatEvalTests {
     @Autowired ChatClient.Builder chatClientBuilder;
-    @Autowired VectorStore vectorStore;
-    @Autowired KeywordRetriever keywordRetriever;
+    @Autowired KnowledgeSearch knowledgeSearch;
+    @Autowired RetrievalProperties retrieval;
     @Autowired JdbcClient jdbc;
     @Autowired JsonMapper json;
-    @Autowired com.allhome.colourcoats.flowlog.Telemetry telemetry;
     @Value("classpath:prompts/sales-system.md") Resource systemPrompt;
     @Value("classpath:evals/cases.json") Resource casesFile;
     @Value("classpath:evals/grounding-judge.md") Resource judgePrompt;
     @Value("${chat.history-size}") int historySize;
-    @Value("${chat.retrieval.top-k}") int topK;
-    @Value("${chat.retrieval.similarity-threshold}") double similarityThreshold;
-    @Value("${chat.retrieval.keyword-top-k}") int keywordTopK;
     @Value("${spring.ai.openai.chat.model}") String model;
     // A stronger model than the bot's: judging is harder than answering, and runs only at eval time.
     String judgeModel = System.getProperty("eval.judgeModel", "gpt-4.1");
@@ -116,9 +113,8 @@ class ChatEvalTests {
 
     private RunResult runCase(EvalCase c, int run, ChatClient judge, String judgeSystem) throws Exception {
         var repository = new InMemoryChatRepository();
-        var service = new ChatService(chatClientBuilder, vectorStore, keywordRetriever, repository, systemPrompt,
-                historySize, topK, similarityThreshold, keywordTopK, true, "Let me connect you with one of our specialists now.");
-        service.observability(telemetry, com.allhome.colourcoats.flowlog.RunJournal.transientJournal());
+        var service = new ChatService(chatClientBuilder, knowledgeSearch, repository, TransactionOperations.withoutTransaction(),
+                systemPrompt, historySize, true, "Let me connect you with one of our specialists now.");
         UUID id = UUID.randomUUID();
         List<String> replies = new ArrayList<>();
         ChatService.Reply last = null;
@@ -197,7 +193,7 @@ class ChatEvalTests {
         var knowledge = new StringBuilder();
         int n = 0;
         for (var source : reply.sources()) {
-            var text = jdbc.sql("SELECT content FROM colourcoats_vectors WHERE metadata->>'chunk_id' = :id OR id::text = :id LIMIT 1")
+            var text = jdbc.sql("SELECT text FROM knowledge_chunk WHERE id::text = :id")
                     .param("id", source.chunkId()).query(String.class).optional();
             if (text.isPresent()) knowledge.append("[").append(++n).append("]\n").append(text.get()).append("\n\n");
         }
@@ -272,7 +268,7 @@ class ChatEvalTests {
     private Map<String, Object> meta(int repeat, boolean judged, double minPassRate, double passRate,
                                      boolean gatePassed, List<String> criticalFailures) throws Exception {
         var hash = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(systemPrompt.getContentAsByteArray()));
-        var datasets = jdbc.sql("SELECT DISTINCT metadata->>'dataset_id' || '@' || (metadata->>'dataset_version') FROM colourcoats_vectors")
+        var datasets = jdbc.sql("SELECT dataset_id || '@' || dataset_version FROM ingestion_run WHERE active")
                 .query(String.class).list();
         var meta = new LinkedHashMap<String, Object>();
         meta.put("timestamp", Instant.now().toString());
@@ -283,7 +279,8 @@ class ChatEvalTests {
         meta.put("model", model);
         meta.put("systemPromptSha256", hash.substring(0, 12));
         meta.put("datasets", datasets);
-        meta.put("retrieval", Map.of("topK", topK, "similarityThreshold", similarityThreshold, "keywordTopK", keywordTopK));
+        meta.put("retrieval", Map.of("topK", retrieval.topK(), "candidates", retrieval.candidates(),
+                "minSimilarity", retrieval.minSimilarity()));
         meta.put("repeat", repeat);
         meta.put("judge", judged ? judgeModel : "off");
         return meta;
