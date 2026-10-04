@@ -12,8 +12,29 @@ spring:
       ddl-auto: validate # Flyway owns the schema (src/main/resources/db/migration); Hibernate only checks it
     properties:
       hibernate.jdbc.time_zone: UTC
+      # Insert chunks in batches instead of one statement per row.
+      hibernate.jdbc.batch_size: 50
+      hibernate.order_inserts: true
   flyway:
     locations: classpath:db/migration
+  ai:
+    model:
+      # Only embeddings are used so far; the other OpenAI model types stay off until a feature needs them.
+      embedding: openai
+      chat: none
+      image: none
+      audio.speech: none
+      audio.transcription: none
+      moderation: none
+    openai:
+      api-key: ${OPENAI_API_KEY:}
+      embedding:
+        options:
+          model: text-embedding-3-small
+          dimensions: 1536 # must match KnowledgeChunkEntity.EMBEDDING_DIMENSIONS and the vector(1536) column
+
+ingestion:
+  embedding-batch-size: 32
 
 server:
   port: ${SERVER_PORT:8080}
