@@ -97,4 +97,14 @@ management:
   endpoints:
     web:
       exposure:
-        include: health
+        include: health,info
+  info:
+    env:
+      enabled: true
+
+# Shown at /actuator/info, so it is always clear which code is running.
+info:
+  app:
+    name: chat-service
+    version: "@project.version@"
+    commit: ${APP_COMMIT:local} # set to the git commit id when deploying

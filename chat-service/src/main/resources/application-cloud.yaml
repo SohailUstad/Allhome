@@ -1,0 +1,10 @@
+# Cloud Run profile (SPRING_PROFILES_ACTIVE=cloud, set in the Docker image).
+server:
+  port: ${PORT:8080} # Cloud Run tells the container which port to listen on
+
+logging:
+  structured:
+    format:
+      console: ecs # one JSON object per line: Cloud Logging keeps every field (flow log: request_id, payloads, ...)
+  file:
+    name: "" # no log file: the container's filesystem is in memory and lost on restart
