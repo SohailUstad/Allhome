@@ -1,13 +1,7 @@
 package com.allhome.colourcoats.salesiq;
 
 import com.allhome.colourcoats.chat.*;
-import com.allhome.colourcoats.salesiq.SalesIqSignatureVerifier;
 import com.allhome.colourcoats.salesiq.SalesIqWebhookController;
-import java.nio.charset.StandardCharsets;
-import java.security.KeyPair;
-import java.security.KeyPairGenerator;
-import java.security.Signature;
-import java.util.Base64;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -31,15 +25,15 @@ class SalesIqWebhookTests {
              "message":{"text":"Do you do Marmorino?"},"request":{"id":"r1"}}
             """;
 
-    MockMvc mvc(SalesIqSignatureVerifier verifier, long deadlineMs, boolean forwardOnHandoff) {
+    MockMvc mvc(long deadlineMs, boolean forwardOnHandoff) {
         when(repository.findLead(any())).thenReturn(Lead.EMPTY);
-        var controller = new SalesIqWebhookController(chat, repository, verifier, JsonMapper.builder().build(),
+        var controller = new SalesIqWebhookController(chat, repository, JsonMapper.builder().build(),
                 deadlineMs, forwardOnHandoff, "3465000000005", "WELCOME", "FALLBACK", "ASK CONTACT", "TRANSFER", "BUSY");
         return MockMvcBuilders.standaloneSetup(controller).setControllerAdvice(new ApiErrors()).build();
     }
 
     MockMvc mvc() {
-        return mvc(new SalesIqSignatureVerifier(""), 2000, false);
+        return mvc(2000, false);
     }
 
     @Test void websiteMessageGetsBotReplyInSalesIqFormat() throws Exception {
@@ -117,7 +111,7 @@ class SalesIqWebhookTests {
             return new ChatService.Reply(UUID.randomUUID(), "late", false, List.of());
         });
         long start = System.currentTimeMillis();
-        mvc(new SalesIqSignatureVerifier(""), 300, false)
+        mvc(300, false)
                 .perform(post("/api/salesiq/webhook").contentType(MediaType.APPLICATION_JSON).content(WEBSITE_MESSAGE))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.action").value("reply"))
                 .andExpect(jsonPath("$.replies[0]").value("FALLBACK ASK CONTACT"));
@@ -145,7 +139,7 @@ class SalesIqWebhookTests {
 
     @Test void handoffForwardsToOperatorDepartmentWhenEnabled() throws Exception {
         when(chat.chat(any(), any(), any())).thenReturn(new ChatService.Reply(UUID.randomUUID(), "Connecting you to a specialist.", true, List.of()));
-        mvc(new SalesIqSignatureVerifier(""), 2000, true)
+        mvc(2000, true)
                 .perform(post("/api/salesiq/webhook").contentType(MediaType.APPLICATION_JSON).content(WEBSITE_MESSAGE))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.action").value("forward"))
@@ -156,7 +150,7 @@ class SalesIqWebhookTests {
 
     @Test void transferredChatIsNeverAnsweredByTheAiAgain() throws Exception {
         when(repository.isForwarded(any())).thenReturn(true);
-        mvc(new SalesIqSignatureVerifier(""), 2000, true)
+        mvc(2000, true)
                 .perform(post("/api/salesiq/webhook").contentType(MediaType.APPLICATION_JSON).content(WEBSITE_MESSAGE))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.action").value("operator_busy"))
@@ -168,7 +162,7 @@ class SalesIqWebhookTests {
 
     @Test void noHandoffKeepsTheAiChatting() throws Exception {
         when(chat.chat(any(), any(), any())).thenReturn(new ChatService.Reply(UUID.randomUUID(), "Which room is it for?", false, List.of()));
-        mvc(new SalesIqSignatureVerifier(""), 2000, true)
+        mvc(2000, true)
                 .perform(post("/api/salesiq/webhook").contentType(MediaType.APPLICATION_JSON).content(WEBSITE_MESSAGE))
                 .andExpect(jsonPath("$.action").value("reply"));
         verify(repository, never()).markForwarded(any());
@@ -176,45 +170,11 @@ class SalesIqWebhookTests {
 
     @Test void failureWhileForwardingTransfersWithoutAskingForNumber() throws Exception {
         when(chat.chat(any(), any(), any())).thenThrow(new IllegalStateException("down"));
-        mvc(new SalesIqSignatureVerifier(""), 2000, true)
+        mvc(2000, true)
                 .perform(post("/api/salesiq/webhook").contentType(MediaType.APPLICATION_JSON).content(WEBSITE_MESSAGE))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.action").value("forward"))
                 .andExpect(jsonPath("$.replies[0]").value("TRANSFER"));
         verify(repository).markForwarded(any(UUID.class));
-    }
-
-    @Test void signedRequestsAreVerifiedAndForgedOnesRejected() throws Exception {
-        KeyPair pair = KeyPairGenerator.getInstance("RSA").generateKeyPair();
-        String publicPem = "-----BEGIN PUBLIC KEY-----\n"
-                + Base64.getMimeEncoder(64, "\n".getBytes()).encodeToString(pair.getPublic().getEncoded())
-                + "\n-----END PUBLIC KEY-----";
-        var signer = Signature.getInstance("SHA256withRSA");
-        signer.initSign(pair.getPrivate());
-        signer.update(WEBSITE_MESSAGE.getBytes(StandardCharsets.UTF_8));
-        String signature = Base64.getEncoder().encodeToString(signer.sign());
-        when(chat.chat(any(), any(), any())).thenReturn(new ChatService.Reply(UUID.randomUUID(), "ok", false, List.of()));
-        var mvc = mvc(new SalesIqSignatureVerifier(publicPem), 2000, false);
-
-        mvc.perform(post("/api/salesiq/webhook").contentType(MediaType.APPLICATION_JSON).content(WEBSITE_MESSAGE)
-                .header("x-siqsignature", signature)).andExpect(status().isOk());
-        mvc.perform(post("/api/salesiq/webhook").contentType(MediaType.APPLICATION_JSON)
-                .content(WEBSITE_MESSAGE.replace("Marmorino", "Tadelakt")).header("x-siqsignature", signature))
-                .andExpect(status().isUnauthorized());
-        mvc.perform(post("/api/salesiq/webhook").contentType(MediaType.APPLICATION_JSON).content(WEBSITE_MESSAGE))
-                .andExpect(status().isUnauthorized());
-        verify(chat, times(1)).chat(any(), any(), any());
-    }
-
-    @Test void bareBase64KeysAndKeyRotationAreSupported() throws Exception {
-        KeyPair old = KeyPairGenerator.getInstance("RSA").generateKeyPair();
-        KeyPair current = KeyPairGenerator.getInstance("RSA").generateKeyPair();
-        var verifier = new SalesIqSignatureVerifier(Base64.getEncoder().encodeToString(old.getPublic().getEncoded()) + ","
-                + Base64.getEncoder().encodeToString(current.getPublic().getEncoded()));
-        var signer = Signature.getInstance("SHA256withRSA");
-        signer.initSign(current.getPrivate());
-        signer.update("{}".getBytes(StandardCharsets.UTF_8));
-        assertThat(verifier.verify("{}", Base64.getEncoder().encodeToString(signer.sign()))).isTrue();
-        assertThat(verifier.verify("{}", "not-base64!")).isFalse();
     }
 }
