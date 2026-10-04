@@ -14,6 +14,7 @@ import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatResponse;
+import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.converter.BeanOutputConverter;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -29,15 +30,16 @@ public class ChatService {
     private final ChatRepository repository;
     private final TransactionOperations transaction;
     private final SystemPrompts systemPrompts;
+    private final LiveModels liveModels;
     private final int historySize;
     private final boolean liveTransfer;
     private final String transferMessage;
-    @Value("${spring.ai.openai.chat.model:unknown}") private String requestedModel = "unknown";
     @Value("${spring.ai.openai.chat.temperature:0.4}") private double temperature = 0.4;
     @Value("${spring.ai.openai.chat.max-completion-tokens:600}") private int maxTokens = 600;
 
     public ChatService(ChatClient.Builder chatClientBuilder, KnowledgeSearch knowledgeSearch,
                        ChatRepository repository, TransactionOperations transaction, SystemPrompts systemPrompts,
+                       LiveModels liveModels,
                        @Value("${chat.history-size:20}") int historySize,
                        @Value("${salesiq.forward-on-handoff:true}") boolean liveTransfer,
                        @Value("${salesiq.transfer-message:Let me connect you with one of our specialists now.}") String transferMessage) {
@@ -46,6 +48,7 @@ public class ChatService {
         this.repository = repository;
         this.transaction = transaction;
         this.systemPrompts = systemPrompts;
+        this.liveModels = liveModels;
         this.historySize = historySize;
         this.liveTransfer = liveTransfer;
         this.transferMessage = transferMessage;
@@ -70,12 +73,13 @@ public class ChatService {
         if (!context.completion.deferred()) repository.saveUserMessage(conversationId, userMessage);
 
         var systemPrompt = systemPrompts.active();
-        var turn = generate(systemPrompt, history, known, userMessage, channel);
+        var live = liveModels.current();
+        var turn = generate(systemPrompt, live, history, known, userMessage, channel);
         // The reply, the lead and the handoff request are saved together or not at all.
         Runnable commit = () -> {
             transaction.executeWithoutResult(status -> {
                 repository.saveAssistantMessage(conversationId, turn.reply(), turn.handoff(), turn.sources(), turn.model(),
-                        turn.promptTokens(), turn.completionTokens(), systemPrompt.versionId());
+                        turn.promptTokens(), turn.completionTokens(), systemPrompt.versionId(), live.changeId());
                 repository.saveLead(conversationId, turn.lead());
                 if (turn.handoff()) repository.requestHandoff(conversationId, turn.handoffReason());
             });
@@ -87,21 +91,23 @@ public class ChatService {
 
     /**
      * The agent's answer with a given prompt over a conversation the caller holds (the console's test chat for a
-     * prompt draft). Real knowledge and the real model; nothing is stored: no conversation, message or lead.
+     * prompt draft, and evals). Real knowledge and the real model; nothing is stored: no conversation, message or lead.
+     * @param model the model to use; null for the live model
      */
-    public Turn preview(SystemPrompts.SystemPrompt systemPrompt, List<ChatRepository.StoredMessage> history, Lead known,
-                        String userMessage, Channel channel) {
+    public Turn preview(SystemPrompts.SystemPrompt systemPrompt, String model, List<ChatRepository.StoredMessage> history,
+                        Lead known, String userMessage, Channel channel) {
         try (var scope = TraceContext.open()) {
             var context = TraceContext.current();
-            context.trafficKind = "prompt_test";
+            if ("customer".equals(context.trafficKind)) context.trafficKind = "prompt_test";
             context.bind(null, channel.name());
-            return generate(systemPrompt, history, known, userMessage, channel);
+            var live = model == null ? liveModels.current() : new LiveModels.LiveModel(model, null);
+            return generate(systemPrompt, live, history, known, userMessage, channel);
         }
     }
 
     /** Retrieval, the model call and the handoff rules: everything about a reply except storing it. */
-    private Turn generate(SystemPrompts.SystemPrompt systemPrompt, List<ChatRepository.StoredMessage> history, Lead known,
-                          String userMessage, Channel channel) {
+    private Turn generate(SystemPrompts.SystemPrompt systemPrompt, LiveModels.LiveModel live,
+                          List<ChatRepository.StoredMessage> history, Lead known, String userMessage, Channel channel) {
         var context = TraceContext.current();
         var documents = retrieve(retrievalQuery(history, userMessage));
         context.completion.checkActive();
@@ -109,11 +115,12 @@ public class ChatService {
         // Text is passed as-is (no template parameters), so braces in user input or knowledge are not interpreted.
         var historyMessages = toMessages(history);
         String userTurn = currentTurn(userMessage, documents, known, channel) + "\n\n" + answerConverter.getFormat();
-        logModelRequest(systemPrompt, historyMessages, userTurn);
+        logModelRequest(systemPrompt, live, historyMessages, userTurn);
         long modelStarted = System.nanoTime();
         ChatResponse response;
         try {
             response = chatClient.prompt()
+                    .options(ChatOptions.builder().model(live.model())) // merged into the configured defaults
                     .system(systemPrompt.content())
                     .messages(historyMessages)
                     .user(userTurn)
@@ -148,8 +155,9 @@ public class ChatService {
                 usage == null ? null : usage.getCompletionTokens());
     }
 
-    /** Flow log: the exact messages and settings sent to the model, in send order, and the prompt version used. */
-    private void logModelRequest(SystemPrompts.SystemPrompt systemPrompt, List<Message> historyMessages, String userTurn) {
+    /** Flow log: the exact messages and settings sent to the model, in send order, and the prompt version and model used. */
+    private void logModelRequest(SystemPrompts.SystemPrompt systemPrompt, LiveModels.LiveModel live,
+                                 List<Message> historyMessages, String userTurn) {
         if (!FlowLog.enabled()) return;
         var messages = new ArrayList<Map<String, String>>();
         messages.add(flowMessage("system", systemPrompt.content()));
@@ -157,8 +165,9 @@ public class ChatService {
             messages.add(flowMessage(message instanceof UserMessage ? "user" : "assistant", message.getText()));
         }
         messages.add(flowMessage("user", userTurn));
-        FlowLog.log("openai.request", "model", requestedModel, "temperature", temperature,
-                "max_completion_tokens", maxTokens,
+        FlowLog.log("openai.request", "model", live.model(),
+                "model_change_id", live.changeId() == null ? null : live.changeId().toString(),
+                "temperature", temperature, "max_completion_tokens", maxTokens,
                 "prompt_version_id", systemPrompt.versionId() == null ? null : systemPrompt.versionId().toString(),
                 "prompt_version", systemPrompt.versionNumber(), "messages", messages);
     }

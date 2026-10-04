@@ -166,7 +166,8 @@ How the agent is configured and changed:
 |---|---|---|
 | Behaviour (tone, grounding, qualification, handoff rules) | System prompt versions in the database (`prompt_version`); version 1 is `prompts/sales-system.md` | Console page **Agent prompt** (`/prompts`): the prompt in sections, edit one section into a draft (locked and protected sections enforced), see the diff, chat with the draft in the **Try version** panel (real knowledge and model, nothing stored), activate; rollback = activate an earlier version. Before activating: `./mvnw test -Pevals -Deval.prompt=<draft id>` |
 | Handoff safety net (explicit requests for a person or call, complaints) | `chat/HandoffPolicy.java` | Unit tests (`HandoffPolicyTests`) |
-| Model, retrieval sizes, deadlines, SalesIQ messages | `application.yaml` (most also as environment variables) | Model: `OPENAI_CHAT_MODEL`, changeable on Cloud Run without a rebuild |
+| Live chat model | Console page **Agent model**; allowed models in `live-model.models` (fast non-reasoning models only: SalesIQ allows 3.8 s); `OPENAI_CHAT_MODEL` is the starting default | The page warns that every live conversation is affected from its next message, requires a reason (15+ characters) and a confirmation, and keeps the history (`live_model_change`). Run the evals with the new model first |
+| Retrieval sizes, deadlines, SalesIQ messages | `application.yaml` (most also as environment variables) | Release and deploy |
 | Knowledge | Uploaded versions | `/api/search` to inspect; activate an earlier version to roll back |
 
 Every release is a git tag; the deployed commit is shown at `/actuator/info`.
@@ -226,8 +227,10 @@ full transcript and handoff reason, a "handled" marker, and CSV export.
 
 - **Request ids.** Every HTTP request gets an id, returned as `X-Request-Id`.
 - **Flow log.** One entry per step of each message, as JSON lines (logger `flow`): `salesiq.request` (the exact
-  SalesIQ payload), `openai.request` (the full prompt and settings), `openai.response` (raw model output, tokens,
-  duration), `salesiq.response` (what SalesIQ received, total duration). Every entry carries `request_id`,
+  SalesIQ payload), `openai.request` (the full prompt, the model requested with the `model_change_id` that made it
+  live, the prompt version and settings), `openai.response` (raw model output, the model OpenAI reports, tokens,
+  duration), `salesiq.response` (what SalesIQ received, total duration). Each stored reply also keeps its model, prompt
+  version and model change, shown under the reply in the lead console transcript ("gpt-4.1-mini · prompt v3"). Every entry carries `request_id`,
   `conversation_id` and `turn_id`. On Cloud Run it is in Cloud Logging (filter `jsonPayload.request_id`); locally in
   `chat-service/logs/chat-service.jsonl`. It contains personal data; `logging.level.flow: OFF` turns it off.
 - **Conversation view.** `/leads/{id}` shows a conversation's transcript, lead and handoff reason.
@@ -237,18 +240,35 @@ full transcript and handoff reason, a "handled" marker, and CSV export.
 ## Evals
 
 Live behaviour evals run the real agent (real retrieval from the database, real OpenAI) through 36 scripted
-conversations and check each reply automatically:
+conversations and check each reply automatically. Eval conversations use the agent's no-storage path and never
+become conversations or leads.
+
+**In the console (Evals page):**
+- **Cases** are stored in the database (`eval_case`, loaded from `evals/cases.json` on first start) and edited in the
+  console: visitor messages one per line, expectations as JSON, critical and enabled flags; who changed what is kept.
+- **Run** a prompt version (usually a draft) with any allowed live model, with or without the grounding judge, on all
+  enabled cases or only the critical ones. The page runs the cases one request at a time (a case takes 5–30 s), so it
+  works within Cloud Run's request model; closing the page pauses the run, opening it continues.
+- **Report:** cases passed, pass rate, critical failures, results by category, and each case with its checks and the
+  full conversation. **Compare with** another run marks every case whose result changed. Each result keeps the case as
+  it was run, so old reports stay correct after a case is edited.
+- **Activation gate:** a draft can only be activated after a full run on it **with the live model** passed at least
+  `EVAL_ACTIVATION_MIN_PASS_RATE` of the cases (default `0.9`; behaviour checks count, the noisy judge and style checks
+  do not; `0` switches the gate off). The prompt page says what is missing. Rolling back to an earlier version is never
+  blocked.
+
+**From the command line** (same runner and cases):
 
 ```
 cd chat-service
 ./mvnw test -Pevals                              # all cases; report in target/evals/latest.md (+ latest.json)
 ./mvnw test -Pevals -Deval.case=pricing-handoff  # one case
 ./mvnw test -Pevals -Deval.prompt=<version id>   # a prompt draft before activating it (default: active; file: the git file)
-# options: -Deval.repeat=3  -Deval.judge=false  -Deval.minPassRate=0.85
+# options: -Deval.repeat=3  -Deval.judge=false  -Deval.minPassRate=0.85  -Deval.model=gpt-4.1
 ```
 
-The `evals` Maven profile runs only `ChatEvalTests` (skipped in normal builds, so CI needs no API key). Eval
-conversations are kept in memory and never reach the lead store. The database it reads must have knowledge loaded.
+The `evals` Maven profile runs only `ChatEvalTests` (skipped in normal builds, so CI needs no API key). The database
+it reads must have knowledge loaded.
 
 **What is checked:** handoff yes/no; persona and intent; lead fields and status; retrieved sources; required content;
 forbidden content in any reply (invented prices, durations, warranties, unsupported claims, prompt leaks); style on
@@ -279,6 +299,7 @@ on) and at least 85% of all checks must pass; otherwise the build fails. A free 
 | `POST /api/prompts` `{"sections":{"<key>":"<text>"}, "note", "confirmProtected"}`, `PATCH /api/prompts/{id}` | Operator | Start a draft from the active version / change a draft: `400` if a section is locked, empty, or protected without confirmation |
 | `POST /api/prompts/{id}/activate`, `POST /api/prompts/{id}/discard` | Operator | Make a version active, also for rollback (`409` if the active version changed since the draft was started) / throw a draft away |
 | `/`, `/leads`, `/leads/export.csv`, `/prompts` | Public / operator | Demo site, lead console, CSV export, agent prompt editor |
+| `/agent-model`, `/evals`, `/evals/cases`, `/evals/runs/{id}` | Operator | Live model (change with reason, history), eval runs and reports, eval cases |
 | `POST /prompts/{versionId}/ai-edits`, `POST /prompts/ai-edits/{id}/refine` (JSON), `.../accept`, `.../discard` | Operator (console session, CSRF) | AI prompt editor: ask, refine, accept into a draft, discard |
 | `POST /prompts/{versionId}/test-chat` `{"message", "channel", "history", "lead"}` | Operator (console session, CSRF) | Test chat with any prompt version; the browser keeps the conversation, nothing is stored |
 | `/actuator/health`, `/actuator/info` | Public | Health, running version |

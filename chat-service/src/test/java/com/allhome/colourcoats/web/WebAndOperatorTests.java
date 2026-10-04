@@ -135,9 +135,10 @@ class WebAndOperatorTests {
     @Test void leadDetailShowsProfileMissingFieldsTranscriptAndActions() throws Exception {
         when(leads.find(ID)).thenReturn(Optional.of(row(null, "98450 12345", "ENGAGED", true)));
         when(leads.messages(ID)).thenReturn(List.of(
-                new LeadRepository.Message("USER", "<script>alert(1)</script> price?", false, List.of(), NOW),
+                new LeadRepository.Message("USER", "<script>alert(1)</script> price?", false, List.of(), NOW, null, null),
                 new LeadRepository.Message("ASSISTANT", "A specialist will share a quote.", true,
-                        List.of(new ChatSource("c1", "https://www.colourcoats.com/#svc-limewash", "I · Wall Textures", 0.6)), NOW)));
+                        List.of(new ChatSource("c1", "https://www.colourcoats.com/#svc-limewash", "I · Wall Textures", 0.6)), NOW,
+                        "gpt-4.1-mini-2025-04-14", 3)));
         mvc.perform(get("/leads/" + ID).with(user("op").roles("OPERATOR")))
                 .andExpect(status().isOk())
                 .andExpect(content().string(containsString("Anonymous visitor")))
@@ -146,6 +147,7 @@ class WebAndOperatorTests {
                 .andExpect(content().string(containsString("https://wa.me/919845012345")))
                 .andExpect(content().string(containsString("Wants lime wash price per sq ft")))
                 .andExpect(content().string(containsString("Mark as handled")))
+                .andExpect(content().string(containsString("gpt-4.1-mini-2025-04-14 · prompt v3")))
                 .andExpect(content().string(containsString("Transferred to SalesIQ operator")))
                 .andExpect(content().string(containsString("&lt;script&gt;alert(1)&lt;/script&gt;")))
                 .andExpect(content().string(not(containsString("<script>alert(1)"))));

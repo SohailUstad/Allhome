@@ -16,7 +16,7 @@ class EvalCasesTests {
     static final Set<String> LEAD_FIELDS = Set.of("name", "phone", "email", "city", "projectType", "spaces",
             "finishInterest", "areaSize", "timeline", "budget", "callbackTime");
 
-    List<ChatEvalTests.EvalCase> cases() throws Exception {
+    List<EvalCase> cases() throws Exception {
         try (InputStream in = getClass().getResourceAsStream("/evals/cases.json")) {
             return JsonMapper.builder().build().readValue(in, new TypeReference<>() {});
         }
@@ -49,15 +49,15 @@ class EvalCasesTests {
             if (e.minMentions() != null) assertThat(e.mustMentionAny()).as("%s: minMentions needs mustMentionAny", c.id())
                     .isNotNull().hasSizeGreaterThanOrEqualTo(e.minMentions());
         }
-        assertThat(cases().stream().filter(ChatEvalTests.EvalCase::critical)).isNotEmpty();
+        assertThat(cases().stream().filter(EvalCase::critical)).isNotEmpty();
     }
 
     /** The suite must keep covering every category, both channels and every persona. */
     @Test void casesCoverCategoriesChannelsAndPersonas() throws Exception {
         var all = cases();
         assertThat(all).hasSizeGreaterThanOrEqualTo(8);
-        assertThat(all.stream().map(ChatEvalTests.EvalCase::category).distinct()).containsExactlyInAnyOrderElementsOf(CATEGORIES);
-        assertThat(all.stream().map(ChatEvalTests.EvalCase::resolvedChannel).distinct())
+        assertThat(all.stream().map(EvalCase::category).distinct()).containsExactlyInAnyOrderElementsOf(CATEGORIES);
+        assertThat(all.stream().map(EvalCase::resolvedChannel).distinct())
                 .containsExactlyInAnyOrder(com.allhome.colourcoats.chat.Channel.values());
         var personas = all.stream().map(c -> c.expect().persona()).filter(java.util.Objects::nonNull).toList();
         assertThat(personas).containsAll(Lead.PERSONAS.stream().filter(p -> !p.equals("UNKNOWN")).toList());
@@ -87,11 +87,11 @@ class EvalCasesTests {
 
     /** Judge quotes must be found despite punctuation/case differences, and invented quotes must not. */
     @Test void judgeEvidenceMatchingIsTolerantButNotLoose() {
-        String knowledge = ChatEvalTests.normalize("An hour with us reveals what samples cannot. Walk through 60+ curated finishes, "
+        String knowledge = EvalRunner.normalize("An hour with us reveals what samples cannot. Walk through 60+ curated finishes, "
                 + "feel textures under your hand, discuss your project with our senior consultants — all");
-        assertThat(knowledge).contains(ChatEvalTests.normalize("Walk through 60+ curated finishes, feel textures under your hand"));
-        assertThat(knowledge).contains(ChatEvalTests.normalize("discuss your project with our Senior Consultants – all"));
-        assertThat(knowledge).doesNotContain(ChatEvalTests.normalize("Walk through 80+ curated finishes"));
+        assertThat(knowledge).contains(EvalRunner.normalize("Walk through 60+ curated finishes, feel textures under your hand"));
+        assertThat(knowledge).contains(EvalRunner.normalize("discuss your project with our Senior Consultants – all"));
+        assertThat(knowledge).doesNotContain(EvalRunner.normalize("Walk through 80+ curated finishes"));
     }
 
     /** The long, multi-question reply the user flagged (2026-10-04) must fail the style checks; a short one must pass. */
@@ -100,10 +100,10 @@ class EvalCasesTests {
                 + "finishes tailored to each space. To help you best, could you share more about the specific corporate projects "
                 + "or spaces you want to target and your timeline for showcasing our finishes? We can then arrange a specialist consultation.";
         String good = "Our metallic coatings are specified for feature walls and ceilings, so they could suit a reception. Which city is the office in?";
-        assertThat(ChatEvalTests.styleChecks(List.of(good))).allMatch(ChatEvalTests.Check::passed);
-        assertThat(ChatEvalTests.styleChecks(List.of(good, flagged)))
+        assertThat(EvalRunner.styleChecks(List.of(good))).allMatch(CaseResult.Check::passed);
+        assertThat(EvalRunner.styleChecks(List.of(good, flagged)))
                 .anyMatch(c -> !c.passed() && c.name().contains("words"));
-        assertThat(ChatEvalTests.styleChecks(List.of("Which room? And when do you want to start?")))
+        assertThat(EvalRunner.styleChecks(List.of("Which room? And when do you want to start?")))
                 .anyMatch(c -> !c.passed() && c.name().contains("question"));
     }
 

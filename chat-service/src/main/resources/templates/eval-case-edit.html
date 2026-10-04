@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments :: head('Eval case · ColourCoats')}"></head>
+<body>
+<nav th:replace="~{fragments :: operatorNav('evals')}"></nav>
+
+<main class="container-fluid px-3 px-lg-4 py-4">
+    <a class="small text-decoration-none" th:href="@{/evals/cases}"><i class="bi bi-arrow-left me-1"></i>Eval cases</a>
+    <h1 class="h2 mt-2 mb-3" th:text="${isNew} ? 'New eval case' : 'Edit: ' + ${form.id}">Edit</h1>
+    <div class="alert alert-danger py-2" th:if="${error}" role="alert" th:text="${error}">Error</div>
+
+    <form class="card detail-card" th:action="@{/evals/cases}" method="post">
+        <input type="hidden" name="isNew" th:value="${isNew}">
+        <div class="card-body row g-3">
+            <div class="col-md-4">
+                <label class="form-label field-label" for="id">Id</label>
+                <input class="form-control" id="id" name="id" th:value="${form.id}" th:readonly="${!isNew}" required
+                       pattern="[a-z0-9][a-z0-9\-]{1,98}" placeholder="e.g. architect-asks-for-samples">
+            </div>
+            <div class="col-md-4">
+                <label class="form-label field-label" for="category">Category</label>
+                <input class="form-control" id="category" name="category" th:value="${form.category}" required
+                       placeholder="grounding, pricing-timeline, visitor-type, handoff-callback, …">
+            </div>
+            <div class="col-md-4">
+                <label class="form-label field-label" for="channel">Channel</label>
+                <select class="form-select" id="channel" name="channel">
+                    <option th:each="c : ${ {'ZOHO_SALESIQ','INSTAGRAM','WEB_CHAT'} }" th:value="${c}" th:selected="${c == form.channel}" th:text="${c}">c</option>
+                </select>
+            </div>
+            <div class="col-12">
+                <label class="form-label field-label" for="description">What this case proves</label>
+                <input class="form-control" id="description" name="description" th:value="${form.description}">
+            </div>
+            <div class="col-md-6">
+                <label class="form-label field-label" for="turns">Visitor messages (one per line)</label>
+                <textarea class="form-control" id="turns" name="turns" rows="8" required th:text="${form.turns}"></textarea>
+            </div>
+            <div class="col-md-6">
+                <label class="form-label field-label" for="expect">Expectations (JSON)</label>
+                <textarea class="form-control font-monospace small" id="expect" name="expect" rows="8" th:text="${form.expect}"></textarea>
+                <div class="form-text">Fields: handoff, persona, intent, leadStatus, lead {field: text}, sourcesInclude [..],
+                    mustMentionAny [..], minMentions, mustNotMatch [regex..], finalMustNotMatch [regex..], maxReplyChars, grounded.</div>
+            </div>
+            <div class="col-12 d-flex gap-4">
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="critical" name="critical" value="true" th:checked="${form.isCritical()}">
+                    <label class="form-check-label" for="critical">Critical</label>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="enabled" name="enabled" value="true" th:checked="${form.isEnabled()}">
+                    <label class="form-check-label" for="enabled">Enabled (included in runs)</label>
+                </div>
+            </div>
+            <div class="col-12">
+                <button class="btn btn-clay" type="submit"><i class="bi bi-save me-1"></i>Save case</button>
+                <a class="btn btn-outline-secondary" th:href="@{/evals/cases}">Cancel</a>
+            </div>
+        </div>
+    </form>
+</main>
+<script th:replace="~{fragments :: bootstrapJs}"></script>
+</body>
+</html>

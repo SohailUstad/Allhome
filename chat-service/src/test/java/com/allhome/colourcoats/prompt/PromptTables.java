@@ -9,6 +9,7 @@ public final class PromptTables {
 	}
 
 	public static void reset(JdbcTemplate jdbc) {
+		jdbc.update("DELETE FROM eval_run"); // results go with their run
 		jdbc.update("DELETE FROM prompt_edit");
 		jdbc.update("UPDATE chat_message SET prompt_version_id = NULL");
 		jdbc.update("DELETE FROM prompt_version");

@@ -59,6 +59,7 @@ class PromptConsoleController {
 		model.addAttribute("base", base);
 		model.addAttribute("changedCount", rows.stream().filter(SectionRow::changed).count());
 		model.addAttribute("stale", version.isDraft() && !Objects.equals(version.getBaseVersionId(), activeId));
+		model.addAttribute("gate", version.isDraft() ? service.activationCheck(version) : null);
 		model.addAttribute("history", service.versions());
 		model.addAttribute("activeId", activeId);
 		model.addAttribute("zone", zone);

@@ -95,6 +95,7 @@ footer.site-footer { background: var(--cc-ink); color: #cfc3b3; }
 .diff-line.added { background: #e6f4ea; color: #0f5132; }
 .diff-line.removed { background: #fdecea; color: #842029; text-decoration: line-through; }
 .diff-mark { display: inline-block; width: 1rem; color: var(--cc-muted); text-decoration: none; }
+.bg-clay { background: var(--cc-clay) !important; }
 .test-chat-log { height: 320px; max-height: 50vh; }
 .transcript .bubble.error { background: #fdecea; border: 1px solid #f5c2c7; color: #842029; }
 .login-wrap { min-height: 100vh; display: grid; place-items: center; background: linear-gradient(135deg, #2b241d, #7e4c2c); }

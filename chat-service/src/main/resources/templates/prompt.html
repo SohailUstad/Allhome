@@ -34,7 +34,7 @@
         <div class="d-flex flex-wrap gap-2">
             <form th:if="${version.status.name() == 'DRAFT' or version.status.name() == 'ARCHIVED'}"
                   th:action="@{/prompts/{id}/activate(id=${version.id})}" method="post" class="m-0">
-                <button class="btn btn-clay" type="submit" th:disabled="${stale}">
+                <button class="btn btn-clay" type="submit" th:disabled="${stale or (gate != null and !gate.allowed())}">
                     <i class="bi bi-rocket-takeoff me-1"></i>
                     <span th:text="${version.status.name() == 'DRAFT'} ? 'Activate draft' : 'Activate again (roll back)'">Activate</span>
                 </button>
@@ -53,6 +53,11 @@
         <strong>Draft.</strong> Visitors keep getting the active version until you activate this one.
         <span th:if="${base != null}"><span th:text="${changedCount}">1</span> section(s) changed from version
             <span th:text="${base.versionNumber}">1</span>.</span>
+        <div th:if="${gate != null and gate.message() != null}" class="mt-1"
+             th:classappend="${gate.allowed()} ? 'text-success' : 'text-danger'">
+            <i class="bi me-1" th:classappend="${gate.allowed()} ? 'bi-patch-check' : 'bi-clipboard-x'"></i>
+            <span th:text="${gate.message()}">Run the evals first.</span>
+            <a th:unless="${gate.allowed()}" th:href="@{/evals(prompt=${version.id})}">Run the evals on this draft</a></div>
         <div th:if="${stale}" class="mt-1 text-danger">
             <i class="bi bi-exclamation-triangle me-1"></i>Another version was activated after this draft was started,
             so it can no longer be activated. Edit the active version to start a new draft.</div>

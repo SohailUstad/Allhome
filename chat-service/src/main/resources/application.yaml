@@ -66,6 +66,25 @@ prompt:
   locked-sections: [input, output] # the code depends on them: input format, reply format, injection rule
   protected-sections: [strict-grounding, persona, intent] # editable only with an explicit confirmation
 
+evals:
+  # A prompt draft can only be activated after a full eval run with the live model passed at least this share of the
+  # cases (0.9 = 90%). Set through EVAL_ACTIVATION_MIN_PASS_RATE (Secret Manager on Cloud Run); 0 switches it off.
+  activation-min-pass-rate: ${EVAL_ACTIVATION_MIN_PASS_RATE:0.9}
+  judge-model: gpt-4.1 # grounding judge: stronger than the chat model, only used during evals
+
+live-model:
+  # Models the operator may make live for visitors (console page "Agent model"; a reason is required and recorded).
+  # Only fast non-reasoning models: SalesIQ allows 3.8 s per reply. The default is spring.ai.openai.chat.model.
+  models:
+    - id: gpt-4.1-mini
+      description: fast and cheap (default)
+    - id: gpt-4.1
+      description: more careful, slower, about 5x the cost
+    - id: gpt-4o-mini
+      description: fast and cheapest, weaker on rules
+  min-reason-length: 15
+  refresh-interval: 30s # other instances pick up a change within this time (this one at once)
+
 prompt-editor:
   # The AI that proposes prompt changes in the console (same OpenAI key; it never answers visitors). The operator picks
   # one of these models per request; models the key cannot use are shown disabled. Standard models run at temperature

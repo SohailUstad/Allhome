@@ -15,6 +15,7 @@ import java.util.concurrent.locks.ReentrantLock;
 import com.allhome.colourcoats.chat.SystemPrompts;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.core.io.ResourceLoader;
@@ -52,12 +53,22 @@ public class PromptService implements SystemPrompts {
 	// Not synchronized: SalesIQ answers on virtual threads, which a monitor held during a query would pin.
 	private final ReentrantLock refreshLock = new ReentrantLock();
 
+	// Looked up when needed: the gate (evals) itself depends on this service.
+	private final ObjectProvider<ActivationGate> gate;
+
 	PromptService(PromptVersionRepository versions, PromptProperties properties, ResourceLoader resources,
-			PlatformTransactionManager transactionManager) {
+			PlatformTransactionManager transactionManager, ObjectProvider<ActivationGate> gate) {
 		this.versions = versions;
 		this.properties = properties;
 		this.resources = resources;
 		this.transaction = new TransactionTemplate(transactionManager);
+		this.gate = gate;
+	}
+
+	/** Whether a draft may be activated now (always allowed when no gate is configured). */
+	public ActivationGate.Verdict activationCheck(PromptVersion draft) {
+		ActivationGate activationGate = gate.getIfAvailable();
+		return activationGate == null ? new ActivationGate.Verdict(true, null) : activationGate.check(draft);
 	}
 
 	/** Stores the first version at startup, so the first visitor does not wait for it. */
@@ -233,6 +244,10 @@ public class PromptService implements SystemPrompts {
 					if (activeId != null && !activeId.equals(target.getBaseVersionId())) {
 						throw new PromptExceptions.Conflict("The active version changed after draft "
 								+ target.getVersionNumber() + " was started; start a new draft from the active version");
+					}
+					ActivationGate.Verdict verdict = activationCheck(target);
+					if (!verdict.allowed()) {
+						throw new PromptExceptions.Conflict(verdict.message());
 					}
 				}
 				case ARCHIVED -> {

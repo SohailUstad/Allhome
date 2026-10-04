@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments :: head('Eval cases · ColourCoats')}"></head>
+<body>
+<nav th:replace="~{fragments :: operatorNav('evals')}"></nav>
+
+<main class="container-fluid px-3 px-lg-4 py-4">
+    <a class="small text-decoration-none" th:href="@{/evals}"><i class="bi bi-arrow-left me-1"></i>Evals</a>
+    <div class="alert alert-success py-2 mt-2" th:if="${notice}" role="status" th:text="${notice}">Saved.</div>
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mt-2 mb-3">
+        <h1 class="h2 mb-0">Eval cases</h1>
+        <a class="btn btn-clay" th:href="@{/evals/cases/new}"><i class="bi bi-plus-lg me-1"></i>New case</a>
+    </div>
+    <div class="card detail-card">
+        <div class="table-responsive">
+            <table class="table table-sm align-middle mb-0">
+                <thead><tr class="small text-secondary"><th>Case</th><th>Category</th><th>Channel</th><th>Turns</th><th>Critical</th><th>Enabled</th><th>Last change</th></tr></thead>
+                <tbody>
+                <tr th:each="c : ${cases}" th:classappend="${!c.enabled} ? 'text-secondary'">
+                    <td><a th:href="@{/evals/cases/{id}(id=${c.id})}" th:text="${c.id}">id</a>
+                        <div class="small text-secondary text-truncate" style="max-width: 32rem" th:text="${c.definition.description()}">desc</div></td>
+                    <td class="small" th:text="${c.definition.category()}">cat</td>
+                    <td class="small" th:text="${c.definition.resolvedChannel()}">ch</td>
+                    <td class="small" th:text="${c.definition.turns().size()}">1</td>
+                    <td><i class="bi bi-exclamation-diamond text-danger" th:if="${c.definition.critical()}"></i></td>
+                    <td><i class="bi" th:classappend="${c.enabled} ? 'bi-check-lg text-success' : 'bi-dash'"></i></td>
+                    <td class="small text-nowrap"><span th:text="${c.updatedBy}">op</span>,
+                        <span th:text="${#temporals.format(c.updatedAt.atZone(zone), 'dd MMM, HH:mm')}">date</span></td>
+                </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</main>
+<script th:replace="~{fragments :: bootstrapJs}"></script>
+</body>
+</html>

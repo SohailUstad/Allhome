@@ -130,6 +130,9 @@
                                 <div class="msg-text" th:text="${m.content}">message</div>
                                 <div class="mt-1 small" th:classappend="${m.role == 'USER'} ? 'text-white-50' : 'text-secondary'">
                                     <span th:text="${#temporals.format(m.createdAt, 'dd MMM, HH:mm')}">time</span>
+                                    <span th:if="${m.model != null}" class="ms-1"
+                                          th:text="'· ' + ${m.model} + (${m.promptVersion != null} ? ' · prompt v' + ${m.promptVersion} : '')"
+                                          title="Model and prompt version that produced this reply">model</span>
                                     <span th:if="${m.handoff}" class="badge text-bg-danger ms-1"><i class="bi bi-flag"></i> handoff</span>
                                     <a th:if="${!m.sources.isEmpty()}" class="ms-1 text-secondary" data-bs-toggle="collapse"
                                        th:href="'#src-' + ${mStat.index}" role="button" aria-expanded="false"

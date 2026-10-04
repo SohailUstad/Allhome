@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments :: head('Eval report · ColourCoats')}"></head>
+<body>
+<nav th:replace="~{fragments :: operatorNav('evals')}"></nav>
+
+<main class="container-fluid px-3 px-lg-4 py-4">
+    <a class="small text-decoration-none" th:href="@{/evals}"><i class="bi bi-arrow-left me-1"></i>Evals</a>
+    <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mt-2 mb-3">
+        <div>
+            <h1 class="h2 mb-1">Eval report</h1>
+            <div class="small text-secondary">
+                Prompt <a th:href="@{/prompts/{id}(id=${run.promptVersionId})}" th:text="'v' + ${versionNumbers.get(run.promptVersionId)}">v1</a>
+                · model <span class="font-monospace" th:text="${run.model}">m</span>
+                · <span th:text="${run.fullRun} ? 'all enabled cases' : 'critical cases only'">all</span>
+                · judge <span th:text="${run.judge} ? 'on' : 'off'">on</span>
+                · <span th:text="${run.createdBy}">op</span>, <span th:text="${#temporals.format(run.createdAt.atZone(zone), 'dd MMM yyyy, HH:mm')}">date</span>
+            </div>
+        </div>
+        <form method="get" class="d-flex gap-2 align-items-center" th:unless="${otherRuns.isEmpty()}">
+            <label class="small text-secondary" for="compare">Compare with</label>
+            <select class="form-select form-select-sm" id="compare" name="compare" onchange="this.form.submit()" style="width:auto">
+                <option value="">—</option>
+                <option th:each="o : ${otherRuns}" th:value="${o.id}" th:selected="${o.id == compare}"
+                        th:text="'v' + ${versionNumbers.get(o.promptVersionId)} + ' · ' + ${o.model} + ' · ' + ${#temporals.format(o.createdAt.atZone(zone), 'dd MMM HH:mm')}">run</option>
+            </select>
+        </form>
+    </div>
+
+    <!-- Progress: the page runs the pending cases one by one -->
+    <div class="card detail-card mb-4" id="evalProgress" th:unless="${pending.isEmpty()}"
+         th:attr="data-url=@{/evals/runs/{id}/cases/(id=${run.id})},data-csrf-header=${_csrf.headerName},data-csrf-token=${_csrf.token},data-pending=${#strings.listJoin(pending, ',')},data-total=${run.caseIds.size()}">
+        <div class="card-body">
+            <div class="d-flex justify-content-between small mb-1"><span id="evalStatus">Starting…</span>
+                <span><span id="evalDone" th:text="${results.size()}">0</span>/<span th:text="${run.caseIds.size()}">36</span></span></div>
+            <div class="progress" role="progressbar" aria-label="Eval progress">
+                <div class="progress-bar bg-clay" id="evalBar" th:style="'width:' + ${results.size() * 100 / run.caseIds.size()} + '%'"></div>
+            </div>
+            <p class="small text-secondary mt-2 mb-0">Keep this page open. Closing it pauses the run; open it again to continue.</p>
+        </div>
+    </div>
+
+    <!-- Summary -->
+    <div class="row g-3 mb-4" th:if="${pending.isEmpty()}">
+        <div class="col-md-4"><div class="card kpi h-100"><div class="card-body">
+            <div class="kpi-value" th:text="${passed} + '/' + ${run.caseIds.size()}">33/36</div>
+            <div class="small text-secondary">cases passed (behaviour checks)</div></div></div></div>
+        <div class="col-md-4"><div class="card kpi h-100"><div class="card-body">
+            <div class="kpi-value" th:text="${#numbers.formatDecimal(run.passRate() * 100, 1, 0)} + '%'"
+                 th:classappend="${run.passRate() >= minPassRate} ? 'text-success' : 'text-danger'">92%</div>
+            <div class="small text-secondary">needed to activate a draft:
+                <span th:text="${#numbers.formatDecimal(minPassRate * 100, 1, 0)} + '%'">90%</span>
+                <span th:unless="${run.fullRun}">(full runs only)</span></div></div></div></div>
+        <div class="col-md-4"><div class="card kpi h-100"><div class="card-body">
+            <div class="kpi-value" th:text="${criticalFailures.size()}">0</div>
+            <div class="small text-secondary">critical cases failed
+                <span th:unless="${criticalFailures.isEmpty()}" th:text="': ' + ${#strings.listJoin(criticalFailures, ', ')}"></span></div></div></div></div>
+    </div>
+
+    <div class="card detail-card mb-4" th:unless="${categories.isEmpty()}">
+        <div class="card-body small">
+            <span class="field-label me-2">By category</span>
+            <span th:each="c : ${categories}" class="me-3"><span th:text="${c.key}">grounding</span>
+                <strong th:text="${c.value[0]} + '/' + ${c.value[1]}">5/6</strong></span>
+        </div>
+    </div>
+
+    <!-- Cases -->
+    <div class="card detail-card">
+        <div class="card-body">
+            <p class="small text-secondary">PASS: every check passed. REVIEW: behaviour passed, only the judge or a style
+                check objected (counts as passed). FAIL: a behaviour check failed.</p>
+            <div class="accordion" id="cases">
+                <div class="accordion-item" th:each="r, s : ${results}">
+                    <h2 class="accordion-header">
+                        <button class="accordion-button collapsed py-2" type="button" data-bs-toggle="collapse"
+                                th:attr="data-bs-target='#case' + ${s.index}">
+                            <span class="badge me-2" th:text="${r.detail.label()}"
+                                  th:classappend="${r.detail.label() == 'PASS'} ? 'text-bg-success' : (${r.detail.label() == 'REVIEW'} ? 'text-bg-warning' : 'text-bg-danger')">PASS</span>
+                            <span class="me-2" th:text="${r.caseId}">case</span>
+                            <span class="small text-secondary me-2" th:text="${r.detail.evalCase().category()} + (${r.detail.evalCase().critical()} ? ' · critical' : '')">cat</span>
+                            <span class="small" th:if="${before.containsKey(r.caseId) and before.get(r.caseId) != r.detail.label()}"
+                                  th:text="'was ' + ${before.get(r.caseId)}"
+                                  th:classappend="${r.isPassed()} ? 'text-success' : 'text-danger'">was FAIL</span>
+                        </button>
+                    </h2>
+                    <div class="accordion-collapse collapse" th:id="'case' + ${s.index}">
+                        <div class="accordion-body small">
+                            <p class="text-secondary" th:text="${r.detail.evalCase().description()}">description</p>
+                            <div class="alert alert-danger py-1" th:if="${r.detail.error() != null}" th:text="${r.detail.error()}">error</div>
+                            <ul class="list-unstyled mb-3">
+                                <li th:each="c : ${r.detail.checks()}">
+                                    <i class="bi" th:classappend="${c.passed()} ? 'bi-check-circle text-success' : 'bi-x-circle text-danger'"></i>
+                                    <span th:text="${c.name()}">check</span>
+                                    <span class="text-secondary" th:unless="${c.passed()}" th:text="' — ' + ${c.detail()}">detail</span>
+                                </li>
+                            </ul>
+                            <div class="transcript">
+                                <th:block th:each="t, ts : ${r.detail.evalCase().turns()}">
+                                    <div class="bubble me"><div class="msg-text" th:text="${t}">visitor</div></div>
+                                    <div class="bubble bot" th:if="${ts.index < r.detail.replies().size()}">
+                                        <div class="msg-text" th:text="${r.detail.replies()[ts.index]}">reply</div></div>
+                                </th:block>
+                            </div>
+                            <div class="text-secondary mt-2">Lead: <span th:text="${r.detail.lead()}">lead</span>
+                                · <span th:text="${r.detail.durationMs() / 1000} + ' s'">s</span></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</main>
+<script th:replace="~{fragments :: bootstrapJs}"></script>
+<script th:src="@{/js/eval-run.js}" defer></script>
+</body>
+</html>
