@@ -146,3 +146,35 @@ curl.exe $URL/actuator/info     # {"app":{...,"commit":"bdf4b2a"}}: the deployed
 ```
 
 To change only the chat model later (no rebuild): `gcloud run services update $SERVICE --project $PROJECT --region $REGION --update-env-vars OPENAI_CHAT_MODEL=<model>`.
+
+## 8. Releasing a new version
+
+The version in `chat-service/pom.xml` is the one `/actuator/info` reports, so it is set in its own PR first
+(`chore/release-<version>`). After that PR is merged, the merge commit is tagged, built and deployed. Only the image
+and `APP_COMMIT` change; secrets, database and the other settings stay as they are.
+
+`v0.1.2` (first release with the pom version set; `v0.1.1` still reported `0.0.1-SNAPSHOT`):
+
+```powershell
+$VERSION = 'v0.1.2'
+$COMMIT  = '5b9c8b2'                    # merge commit of PR #18
+
+git switch main; git pull
+git tag -a $VERSION $COMMIT -m "Release 0.1.2"
+git push origin $VERSION
+git diff $VERSION --stat -- chat-service    # empty: building exactly the tagged code
+
+gcloud builds submit chat-service --project $PROJECT --region $REGION --tag "${IMAGE}:$VERSION" --suppress-logs
+gcloud artifacts docker tags add "${IMAGE}:$VERSION" "${IMAGE}:$COMMIT"
+gcloud run services update $SERVICE --project $PROJECT --region $REGION --image "${IMAGE}:$VERSION" `
+  --update-env-vars APP_COMMIT=$COMMIT
+```
+
+Result: build `96a056ba` (1 min 53 s), revision `chat-service-00002-jqt` serving 100% of traffic.
+
+```powershell
+curl.exe $URL/actuator/health   # {"groups":["liveness","readiness"],"status":"UP"}
+curl.exe $URL/actuator/info     # {"app":{"name":"chat-service","version":"0.1.2","commit":"5b9c8b2"}}
+```
+
+Rolling back means pointing the service at the previous image: `gcloud run services update $SERVICE --project $PROJECT --region $REGION --image "${IMAGE}:v0.1.1" --update-env-vars APP_COMMIT=bdf4b2a`.
