@@ -57,7 +57,10 @@ class PromptConsoleController {
 		model.addAttribute("sections", rows);
 		model.addAttribute("selected", selected);
 		model.addAttribute("base", base);
-		model.addAttribute("changedCount", rows.stream().filter(SectionRow::changed).count());
+		List<String> removed = base == null ? List.of()
+				: base.getSections().stream().filter(s -> version.section(s.key()).isEmpty()).map(PromptService::label).toList();
+		model.addAttribute("removed", removed);
+		model.addAttribute("changedCount", rows.stream().filter(SectionRow::changed).count() + removed.size());
 		model.addAttribute("stale", version.isDraft() && !Objects.equals(version.getBaseVersionId(), activeId));
 		model.addAttribute("gate", version.isDraft() ? service.activationCheck(version) : null);
 		model.addAttribute("history", service.versions());
@@ -105,6 +108,56 @@ class PromptConsoleController {
 		catch (PromptExceptions.RuleViolation | PromptExceptions.Conflict ex) {
 			return editPage(model, version, section, body, ex.getMessage(), false);
 		}
+	}
+
+	@GetMapping("/{id}/sections/new")
+	String newSectionForm(@PathVariable UUID id, @RequestParam(required = false) String after, Model model) {
+		PromptVersion version = find(id);
+		return newSectionPage(model, version, "", "", after == null ? version.getSections().getLast().key() : after, null);
+	}
+
+	/** Adds a section to the draft, or to a new draft when adding to the active version. */
+	@PostMapping("/{id}/sections")
+	String addSection(@PathVariable UUID id, @RequestParam String title, @RequestParam String body,
+			@RequestParam String after, @RequestParam(required = false) String note, Principal principal, Model model,
+			RedirectAttributes redirect) {
+		PromptVersion version = find(id);
+		try {
+			PromptVersion draft = service.addSection(id, title, body, after, note, principal.getName());
+			List<String> keys = draft.getSections().stream().map(PromptSection::key).toList();
+			redirect.addFlashAttribute("notice", "Section '" + title.strip() + "' added to draft version "
+					+ draft.getVersionNumber() + ". Visitors keep getting the active version until you activate the draft.");
+			return "redirect:/prompts/" + draft.getId() + "?section=" + keys.get(keys.indexOf(after) + 1);
+		}
+		catch (PromptExceptions.RuleViolation | PromptExceptions.Conflict ex) {
+			return newSectionPage(model, version, title, body, after, ex.getMessage());
+		}
+	}
+
+	@PostMapping("/{id}/sections/{key}/remove")
+	String removeSection(@PathVariable UUID id, @PathVariable String key, Principal principal,
+			RedirectAttributes redirect) {
+		try {
+			PromptVersion draft = service.removeSection(id, key, null, principal.getName());
+			redirect.addFlashAttribute("notice", "Section removed in draft version " + draft.getVersionNumber()
+					+ ". Visitors keep getting the active version until you activate the draft.");
+			return "redirect:/prompts/" + draft.getId();
+		}
+		catch (PromptExceptions.RuleViolation | PromptExceptions.Conflict ex) {
+			redirect.addFlashAttribute("error", ex.getMessage());
+			return "redirect:/prompts/" + id + "?section=" + key;
+		}
+	}
+
+	private String newSectionPage(Model model, PromptVersion version, String title, String body, String after,
+			String error) {
+		model.addAttribute("version", version);
+		model.addAttribute("sections", version.getSections().stream().map(s -> row(s, null)).toList());
+		model.addAttribute("title", title);
+		model.addAttribute("body", body);
+		model.addAttribute("after", after);
+		model.addAttribute("error", error);
+		return "prompt-section-new";
 	}
 
 	@PostMapping("/{id}/activate")

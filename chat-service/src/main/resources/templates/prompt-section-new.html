@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments :: head('New prompt section · ColourCoats')}"></head>
+<body>
+<nav th:replace="~{fragments :: operatorNav('prompt')}"></nav>
+
+<main class="container-fluid px-3 px-lg-4 py-4">
+    <a class="small text-decoration-none" th:href="@{/prompts/{id}(id=${version.id})}">
+        <i class="bi bi-arrow-left me-1"></i>Back to the prompt</a>
+
+    <h1 class="h2 mt-3 mb-1">New section</h1>
+    <p class="text-secondary small mb-3" th:text="${version.status.name() == 'DRAFT'} ? 'The section is added to draft version ' + ${version.versionNumber} + '.'
+        : 'Adding starts a new draft from the active version. Visitors keep getting the active version until you activate the draft.'">target</p>
+
+    <div class="alert alert-danger py-2" th:if="${error}" role="alert">
+        <i class="bi bi-exclamation-circle me-1"></i><span th:text="${error}">Error</span></div>
+
+    <form th:action="@{/prompts/{id}/sections(id=${version.id})}" method="post" class="card detail-card">
+        <div class="card-body row g-3">
+            <div class="col-md-7">
+                <label class="form-label field-label" for="title">Title</label>
+                <input class="form-control" id="title" name="title" maxlength="100" required th:value="${title}"
+                       placeholder="e.g. 16. FESTIVE OFFERS">
+            </div>
+            <div class="col-md-5">
+                <label class="form-label field-label" for="after">Insert after</label>
+                <select class="form-select" id="after" name="after">
+                    <option th:each="s : ${sections}" th:value="${s.key}" th:selected="${s.key == after}" th:text="${s.title}">section</option>
+                </select>
+            </div>
+            <div class="col-12">
+                <label class="form-label field-label" for="body">Section text</label>
+                <textarea class="form-control font-monospace prompt-editor" id="body" name="body" rows="14" required
+                          th:text="${body}" placeholder="Write the rules for the agent, in the same style as the other sections."></textarea>
+                <div class="form-text">Rules about ColourCoats facts (prices, products, offers) belong in the knowledge base, not here.</div>
+            </div>
+            <div class="col-md-8">
+                <label class="form-label field-label" for="note">Note (why this section)</label>
+                <input class="form-control" id="note" name="note" maxlength="500">
+            </div>
+            <div class="col-12 d-flex gap-2">
+                <button class="btn btn-clay" type="submit"><i class="bi bi-plus-lg me-1"></i>Add to draft</button>
+                <a class="btn btn-outline-secondary" th:href="@{/prompts/{id}(id=${version.id})}">Cancel</a>
+            </div>
+        </div>
+    </form>
+</main>
+<script th:replace="~{fragments :: bootstrapJs}"></script>
+</body>
+</html>

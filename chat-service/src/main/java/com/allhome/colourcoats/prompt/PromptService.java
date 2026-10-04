@@ -227,6 +227,93 @@ public class PromptService implements SystemPrompts {
 	}
 
 	/**
+	 * Adds a new, editable section after another one, in the draft being edited or in a new draft when given the
+	 * active version.
+	 * @param afterKey the section the new one follows
+	 */
+	public PromptVersion addSection(UUID versionId, String title, String body, String afterKey, String note,
+			String by) {
+		String heading = title == null ? "" : title.strip();
+		if (heading.isEmpty() || heading.length() > 100 || heading.contains("\n")) {
+			throw new PromptExceptions.RuleViolation("Give the section a one-line title of at most 100 characters");
+		}
+		if (body == null || body.isBlank()) {
+			throw new PromptExceptions.RuleViolation("Section '" + heading + "' cannot be empty");
+		}
+		return changeStructure(versionId, sections -> {
+			int at = indexOf(sections, afterKey) + 1;
+			String key = PromptDocument.key(heading);
+			for (int i = 2; indexOfOrMinus(sections, key) >= 0 || properties.lock(key) != SectionLock.NONE; i++) {
+				key = PromptDocument.key(heading) + "-" + i;
+			}
+			List<PromptSection> result = new ArrayList<>(sections);
+			result.add(at, new PromptSection(key, heading, PromptDocument.normalise(body).strip()));
+			return result;
+		}, note == null || note.isBlank() ? "Added section '" + heading + "'" : note, by);
+	}
+
+	/** Removes a section; locked and protected sections can never be removed. */
+	public PromptVersion removeSection(UUID versionId, String key, String note, String by) {
+		if (properties.lock(key) != SectionLock.NONE) {
+			throw new PromptExceptions.RuleViolation(
+					"Section '" + key + "' is " + properties.lock(key).name().toLowerCase() + " and cannot be removed");
+		}
+		return changeStructure(versionId, sections -> {
+			List<PromptSection> result = new ArrayList<>(sections);
+			PromptSection removed = result.remove(indexOf(sections, key));
+			log.info("{} removed section '{}'", by, label(removed));
+			return result;
+		}, note == null || note.isBlank() ? "Removed section '" + key + "'" : note, by);
+	}
+
+	/** Applies a structural change to a draft, or to a new draft started from the active version. */
+	private PromptVersion changeStructure(UUID versionId, java.util.function.UnaryOperator<List<PromptSection>> change,
+			String note, String by) {
+		return transaction.execute(status -> {
+			PromptVersion version = version(versionId);
+			if (version.isDraft()) {
+				version.replaceSections(withinLimit(change.apply(version.getSections())), note, clock.instant());
+				return version;
+			}
+			if (version.getStatus() != PromptStatus.ACTIVE) {
+				throw new PromptExceptions.Conflict("Only the active version or a draft can be changed");
+			}
+			var draft = new PromptVersion(properties.name(), versions.maxVersionNumber(properties.name()) + 1,
+					withinLimit(change.apply(version.getSections())), version.getId(), note, by, clock.instant());
+			PromptVersion saved = versions.saveAndFlush(draft);
+			log.info("{} started draft version {} of system prompt '{}': {}", by, saved.getVersionNumber(),
+					properties.name(), note);
+			return saved;
+		});
+	}
+
+	private List<PromptSection> withinLimit(List<PromptSection> sections) {
+		int length = PromptDocument.assemble(sections).length();
+		if (length > properties.maxLength()) {
+			throw new PromptExceptions.RuleViolation(
+					"The prompt would be " + length + " characters; the limit is " + properties.maxLength());
+		}
+		return sections;
+	}
+
+	private static int indexOf(List<PromptSection> sections, String key) {
+		int index = indexOfOrMinus(sections, key);
+		if (index < 0) {
+			throw new PromptExceptions.RuleViolation("There is no section '" + key + "'");
+		}
+		return index;
+	}
+
+	private static int indexOfOrMinus(List<PromptSection> sections, String key) {
+		for (int i = 0; i < sections.size(); i++) {
+			if (sections.get(i).key().equals(key)) {
+				return i;
+			}
+		}
+		return -1;
+	}
+
+	/**
 	 * Makes a version the one visitors get. Drafts must have been started from the version that is active now, so a
 	 * newer change is never overwritten silently; archived versions can always be activated again (rollback).
 	 */
