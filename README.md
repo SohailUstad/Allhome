@@ -118,17 +118,20 @@ secrets in Secret Manager, every command recorded.
   stable conversation id, so every turn of a chat lands in the same transcript and lead.
 - **Greeting.** Calls that are not visitor messages (the `trigger` when a chat opens, SalesIQ's validation ping)
   get the configured opener (`salesiq.opener`).
-- **5-second limit.** SalesIQ waits at most 5 s. The agent runs on a worker thread with a 3.8 s deadline
-  (`salesiq.response-deadline-ms`); if it is late or fails, the visitor gets a holding message, the conversation is
-  queued for a human, and SalesIQ always receives a valid response. A late answer can never be saved afterwards.
+- **5-second limit.** SalesIQ waits at most 5 s for a webhook answer (Zoho's documented timeout per webhook
+  execution). The agent runs on a worker thread with a **3.8 s** deadline (`salesiq.response-deadline-ms`), which
+  leaves about 1.2 s of the 5 s for everything outside the agent: the network both ways between SalesIQ and Cloud Run,
+  reading the request, and writing the answer. The margin is a judgement, not a measurement; it can be tuned in
+  configuration. If the agent is late or fails, the visitor gets a holding message, the conversation is queued for a
+  human, and SalesIQ always receives a valid response. A late answer can never be saved afterwards.
 - **Handoff = live transfer.** When the agent hands off, the webhook answers with SalesIQ's `forward` action (optional
   `SALESIQ_DEPARTMENT_ID`), and the reply is stripped of questions (the bot will not be there to read the answer).
   The AI never answers that conversation again; if no operator picks it up, SalesIQ calls the bot again and the
   visitor gets SalesIQ's "operators busy, leave a message" flow.
 - **Pre-chat details.** Name, email and phone from SalesIQ's pre-chat form are copied into the lead (placeholder
   names such as "Visitor 51234" are ignored; SalesIQ's geo-IP city is not used as the project city).
-- **Signatures.** `SalesIqSignatureVerifier` checks SalesIQ's RSA signature (`x-siqsignature`) when
-  `SALESIQ_PUBLIC_KEYS` is set (two keys supported for rotation). It is not enabled in the demo; see Limitations.
+- **Webhook authentication: not set up.** SalesIQ can sign its webhook calls ("Secure your webhook"), but this demo
+  does not verify signatures, so the webhook accepts any well-formed request. See Limitations.
 
 ## Knowledge base
 
@@ -243,8 +246,13 @@ full transcript and handoff reason, a "handled" marker, and CSV export.
   live, the prompt version and settings), `openai.response` (raw model output, the model OpenAI reports, tokens,
   duration), `salesiq.response` (what SalesIQ received, total duration). Each stored reply also keeps its model, prompt
   version and model change, shown under the reply in the lead console transcript ("gpt-4.1-mini · prompt v3"). Every entry carries `request_id`,
-  `conversation_id` and `turn_id`. On Cloud Run it is in Cloud Logging (filter `jsonPayload.request_id`); locally in
-  `chat-service/logs/chat-service.jsonl`. It contains personal data; `logging.level.flow: OFF` turns it off.
+  `conversation_id` and `turn_id`. Locally it is written to `chat-service/logs/chat-service.jsonl`. It contains
+  personal data; `logging.level.flow: OFF` turns it off.
+- **Cloud Logging (on Cloud Run).** No logging agent or library is involved: Cloud Run collects everything the
+  container writes to its console and stores it in Cloud Logging. The `cloud` profile (`application-cloud.yaml`) writes
+  every log line, including the flow log, as one JSON object (ECS format) to the console, so Cloud Logging keeps each
+  field searchable under `jsonPayload`. To follow one message: Logs Explorer, resource *Cloud Run Revision*
+  `chat-service`, query `jsonPayload.request_id="<id>"` (or `jsonPayload.conversation_id`, `jsonPayload.flow_step`).
 - **Conversation view.** `/leads/{id}` shows a conversation's transcript, lead and handoff reason.
 - **Retrieval view.** `GET /api/search?q=...` shows exactly which chunks the agent would get for a question and why.
 - **Version.** `/actuator/info` shows the deployed version and commit; `/actuator/health` the health.
@@ -335,8 +343,9 @@ pass. Releases are git tags; the deployed image is tagged with the release and t
 
 ## Limitations
 
-- **Webhook signatures are not enforced in the demo** (`SALESIQ_PUBLIC_KEYS` is empty). The check is implemented and
-  unit-tested; enabling it safely means a no-traffic Cloud Run revision first.
+- **The SalesIQ webhook is not authenticated.** SalesIQ's webhook signing ("Secure your webhook") is not set up, so
+  anyone who knows the URL can send it requests. Adding it means verifying SalesIQ's signature header with the public
+  key from the SalesIQ console before handling a request.
 - **Image-only PDFs are skipped**: the textures and wood-coatings catalogues need OCR or a vision model.
 - **Synchronous webhook only.** An answer that takes longer than 3.8 s becomes a holding message and a handoff.
 - **A handoff is one-way.** The AI never re-enters a forwarded conversation; with no operator online the visitor gets
@@ -360,7 +369,8 @@ pass. Releases are git tags; the deployed image is tagged with the release and t
 ## Future improvements
 
 - Fix the known agent issues above, each with an eval run before and after.
-- Enable webhook signature verification through a no-traffic revision, then promote.
+- Authenticate the SalesIQ webhook by verifying SalesIQ's signature ("Secure your webhook"), rolled out through a
+  no-traffic Cloud Run revision first.
 - OCR or vision-model transcription for the image-only catalogues.
 - Async ("pending") replies for slow website answers; pass operator availability to the agent; handle SalesIQ failure
   events (1001/1002/1007) with an offline flow instead of the greeting.
