@@ -34,7 +34,7 @@ class SecurityConfiguration {
 			.authorizeHttpRequests(requests -> requests
 				.dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
 				.requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
-				.requestMatchers("/api/ingestions", "/api/ingestions/**").hasRole(OPERATOR_ROLE)
+				.requestMatchers("/api/ingestions", "/api/ingestions/**", "/api/search").hasRole(OPERATOR_ROLE)
 				.anyRequest().authenticated())
 			.httpBasic(withDefaults())
 			.sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))

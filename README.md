@@ -53,8 +53,13 @@ content is identical and rejected (409) otherwise, so give each new crawl a new 
 | `POST /api/ingestions` (form field `file`) | Upload an archive: `201` stored and active, `200` already stored, `400` invalid archive, `409` version exists with different content |
 | `GET /api/ingestions[?datasetId=...]` | List stored versions, newest first |
 | `POST /api/ingestions/{runId}/activate` | Make an earlier version active again (rollback, no re-embedding) |
+| `GET /api/search?q=...` | Show which knowledge chunks the assistant would use for a question, with similarity and whether vector search, keyword search or both found them |
 
-All `/api/ingestions` requests need the operator login; only `/actuator/health` is public.
+All `/api/ingestions` and `/api/search` requests need the operator login; only `/actuator/health` is public.
+
+Search is hybrid: vector search (closeness in meaning) plus PostgreSQL full-text search (shared words, which catches
+exact product and place names), merged with Reciprocal Rank Fusion, over the active versions only. Tuning lives under
+`retrieval.*` in `application.yaml` (`top-k`, `candidates`, `min-similarity`).
 
 ## Tests
 

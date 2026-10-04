@@ -117,6 +117,46 @@ class KnowledgeSearchTests {
 	}
 
 	@Test
+	void keywordSearchFindsExactNamesThatVectorSearchMisses() {
+		ingest("colourcoats", "v1", texts(0.10, "Marmorino lime plaster"), texts(0.50, "Wood coatings"));
+
+		List<RetrievedChunk> found = search.search("Do you do Marmorino?");
+
+		assertThat(found).extracting(RetrievedChunk::text).anySatisfy(text -> assertThat(text).contains("Marmorino"));
+		RetrievedChunk marmorino = found.stream().filter(c -> c.text().contains("Marmorino")).findFirst().orElseThrow();
+		assertThat(marmorino.match()).isEqualTo(RetrievedChunk.Match.KEYWORD);
+		assertThat(marmorino.similarity()).isCloseTo(0.10, within(1e-4)); // below min-similarity, kept as exact match
+	}
+
+	@Test
+	void chunkFoundByBothSearchesRanksFirst() {
+		ingest("colourcoats", "v1", texts(0.90, "Wall textures"), texts(0.60, "Experience centre in Tiljala, Kolkata"));
+
+		List<RetrievedChunk> found = search.search("Is there an experience centre in Tiljala?");
+
+		assertThat(found.get(0).text()).contains("Tiljala");
+		assertThat(found.get(0).match()).isEqualTo(RetrievedChunk.Match.BOTH);
+		assertThat(found.get(1).match()).isEqualTo(RetrievedChunk.Match.VECTOR);
+	}
+
+	@Test
+	void keywordSearchAlsoIgnoresInactiveVersions() {
+		ingest("colourcoats", "v1", texts(0.10, "Marmorino lime plaster"));
+		ingest("colourcoats", "v2", texts(0.10, "Wood coatings")); // now active
+
+		assertThat(search.search("Do you do Marmorino?")).isEmpty();
+	}
+
+	@Test
+	void questionOfOnlyStopWordsUsesVectorSearchAlone() {
+		ingest("colourcoats", "v1", 0.8);
+
+		assertThat(search.search("what is it?")).singleElement()
+			.extracting(RetrievedChunk::match)
+			.isEqualTo(RetrievedChunk.Match.VECTOR);
+	}
+
+	@Test
 	void blankQuestionFindsNothingWithoutCallingTheModel() {
 		ingest("colourcoats", "v1", 0.9);
 		int requests = embeddingModel.requests();
@@ -126,12 +166,24 @@ class KnowledgeSearchTests {
 		assertThat(embeddingModel.requests()).isEqualTo(requests);
 	}
 
+	/** A chunk with an intended similarity to the question and some words for keyword search. */
+	private record ChunkSpec(double similarity, String words) {
+	}
+
+	private static ChunkSpec texts(double similarity, String words) {
+		return new ChunkSpec(similarity, words);
+	}
+
 	private void ingest(String datasetId, String version, double... similarities) {
+		ingest(datasetId, version, DoubleStream.of(similarities).mapToObj(s -> texts(s, "")).toArray(ChunkSpec[]::new));
+	}
+
+	private void ingest(String datasetId, String version, ChunkSpec... specs) {
 		List<KnowledgeChunk> chunks = new java.util.ArrayList<>();
-		for (int i = 0; i < similarities.length; i++) {
-			chunks.add(new KnowledgeChunk(UUID.randomUUID(), "c" + i, "doc1",
-					"s=%.2f #%d %s %s".formatted(similarities[i], i, datasetId, version), "https://example.com/", "Page",
-					null, List.of("Section"), List.of("https://example.com/#section")));
+		for (int i = 0; i < specs.length; i++) {
+			String text = "s=%.2f #%d %s %s %s".formatted(specs[i].similarity(), i, specs[i].words(), datasetId, version);
+			chunks.add(new KnowledgeChunk(UUID.randomUUID(), "c" + i, "doc1", text, "https://example.com/", "Page", null,
+					List.of("Section"), List.of("https://example.com/#section")));
 		}
 		ingestion.ingest(new KnowledgeArchive(datasetId, version, "https://example.com/", chunks),
 				datasetId + "-" + version);
