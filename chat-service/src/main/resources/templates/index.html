@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments :: head('ColourCoats — Architectural Finishes, Wall Textures & Wood Coatings')}"></head>
+<body>
+
+<nav class="navbar navbar-expand-lg site-nav sticky-top">
+    <div class="container">
+        <a class="navbar-brand brand-serif fs-3 text-ink" href="#top">ColourCoats</a>
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#siteNav" aria-controls="siteNav"
+                aria-expanded="false" aria-label="Toggle navigation"><span class="navbar-toggler-icon"></span></button>
+        <div class="collapse navbar-collapse" id="siteNav">
+            <ul class="navbar-nav ms-auto align-items-lg-center gap-lg-2">
+                <li class="nav-item"><a class="nav-link" href="#services">Finishes</a></li>
+                <li class="nav-item"><a class="nav-link" href="#craft">Craft</a></li>
+                <li class="nav-item"><a class="nav-link" href="#centres">Experience centres</a></li>
+                <li class="nav-item ms-lg-2"><button class="btn btn-clay btn-sm px-3" type="button" data-open-chat>
+                    <i class="bi bi-chat-square-dots me-1"></i>Talk to us</button></li>
+            </ul>
+        </div>
+    </div>
+</nav>
+
+<header class="hero" id="top">
+    <div class="container position-relative" style="z-index:1">
+        <p class="eyebrow mb-3">Premium architectural finishes · India</p>
+        <h1 class="mb-4">Surfaces, elevated<br>to art.</h1>
+        <p class="lead mb-4">Italian-grade wood finishes, curated wall paints and bespoke textures, defined by precision,
+            craftsmanship and an uncompromising attention to detail.</p>
+        <div class="d-flex flex-wrap gap-2">
+            <button class="btn btn-clay btn-lg px-4" type="button" data-open-chat data-chat-prompt="I'd like to discuss a project">
+                <i class="bi bi-chat-square-text me-2"></i>Plan my project</button>
+            <a class="btn btn-outline-light btn-lg px-4" href="#centres">Visit an experience centre</a>
+        </div>
+    </div>
+</header>
+
+<main>
+    <section class="py-5 py-lg-6" id="services">
+        <div class="container py-4">
+            <p class="eyebrow">Finishes</p>
+            <h2 class="display-6 mb-4">Bespoke surface solutions, tailored to every vision.</h2>
+            <div class="row g-4">
+                <div class="col-md-6 col-lg-3">
+                    <div class="service-card p-4">
+                        <div class="service-num mb-2">I</div>
+                        <h3 class="h4">Wall Textures &amp; Lime Washes</h3>
+                        <p class="text-secondary mb-3">Walls that breathe, walls that remember. Lime plaster, Calceterra,
+                            Marmorino and tadelakt-inspired textures, hand-burnished.</p>
+                        <button class="btn btn-link p-0 text-clay" data-open-chat data-chat-prompt="Where can lime wash be used?">Ask about lime wash →</button>
+                    </div>
+                </div>
+                <div class="col-md-6 col-lg-3">
+                    <div class="service-card p-4">
+                        <div class="service-num mb-2">II</div>
+                        <h3 class="h4">Metallic Coatings</h3>
+                        <p class="text-secondary mb-3">Where light becomes a material.</p>
+                        <button class="btn btn-link p-0 text-clay" data-open-chat data-chat-prompt="Tell me about your metallic coatings">Ask about metallics →</button>
+                    </div>
+                </div>
+                <div class="col-md-6 col-lg-3">
+                    <div class="service-card p-4">
+                        <div class="service-num mb-2">IV</div>
+                        <h3 class="h4">Painting Works</h3>
+                        <p class="text-secondary mb-3">The quiet backbone of a well-made home. Putty, sanding, primer and
+                            thin coats, cut in by brush.</p>
+                        <button class="btn btn-link p-0 text-clay" data-open-chat data-chat-prompt="Which paint brands do you work with?">Ask about painting →</button>
+                    </div>
+                </div>
+                <div class="col-md-6 col-lg-3">
+                    <div class="service-card p-4">
+                        <div class="service-num mb-2">V</div>
+                        <h3 class="h4">Wood Coatings</h3>
+                        <p class="text-secondary mb-3">Italian-grade wood finishes, including Polycoat (PU), for doors,
+                            furniture and joinery.</p>
+                        <button class="btn btn-link p-0 text-clay" data-open-chat data-chat-prompt="What wood coatings do you offer?">Ask about wood →</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="py-5 bg-sand" id="craft">
+        <div class="container py-4">
+            <div class="row align-items-center g-5">
+                <div class="col-lg-5">
+                    <p class="eyebrow">Execution only we can deliver</p>
+                    <h2 class="display-6 mb-3">Our hands only. The sample and the wall — identical twins.</h2>
+                    <p class="text-secondary">Every coat, every corner is applied by our in-house artisans.</p>
+                </div>
+                <div class="col-lg-7">
+                    <div class="row text-center g-4">
+                        <div class="col-4"><div class="stat">30+</div><div class="small text-secondary mt-2">Years of craft</div></div>
+                        <div class="col-4"><div class="stat">2,000</div><div class="small text-secondary mt-2">Artisans</div></div>
+                        <div class="col-4"><div class="stat">0</div><div class="small text-secondary mt-2">Outsourcing</div></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="py-5" id="centres">
+        <div class="container py-4">
+            <p class="eyebrow">Experience centres</p>
+            <h2 class="display-6 mb-2">Experience the texture, depth &amp; craft in person.</h2>
+            <p class="text-secondary mb-4">Walk through 60+ curated finishes, feel textures under your hand, and discuss your project with our senior consultants.</p>
+            <div class="row g-4">
+                <div class="col-sm-6 col-lg-3"><div class="centre"><h3 class="h5 mb-1">Mumbai</h3><p class="text-secondary small mb-0">Andheri East</p></div></div>
+                <div class="col-sm-6 col-lg-3"><div class="centre"><h3 class="h5 mb-1">Delhi</h3><p class="text-secondary small mb-0">Sultanpur</p></div></div>
+                <div class="col-sm-6 col-lg-3"><div class="centre"><h3 class="h5 mb-1">Kolkata</h3><p class="text-secondary small mb-0">Tiljala</p></div></div>
+                <div class="col-sm-6 col-lg-3"><div class="centre"><h3 class="h5 mb-1">Coimbatore</h3><p class="text-secondary small mb-0">R.S. Puram</p></div></div>
+            </div>
+            <button class="btn btn-outline-clay mt-4" type="button" data-open-chat data-chat-prompt="I'd like to visit an experience centre">
+                <i class="bi bi-calendar-check me-1"></i>Plan a visit</button>
+        </div>
+    </section>
+</main>
+
+<footer class="site-footer py-4">
+    <div class="container d-flex flex-column flex-md-row justify-content-between gap-2 small">
+        <span class="brand-serif fs-5 text-white">ColourCoats</span>
+        <span>Chat with us on this page (bottom left), via the live chat (bottom right), or on Instagram.</span>
+    </div>
+</footer>
+
+<!-- Direct chat: ColourCoats' own assistant, calls /api/chat (channel WEB_CHAT) -->
+<button class="btn btn-clay chat-launcher" type="button" id="chatLauncher" aria-controls="chatPanel" aria-expanded="false">
+    <i class="bi bi-chat-square-dots me-2"></i>Chat with Aira
+</button>
+<section class="chat-panel" id="chatPanel" aria-label="Chat with Aira, ColourCoats assistant">
+    <div class="chat-header d-flex align-items-center gap-2">
+        <div class="chat-avatar" aria-hidden="true">A</div>
+        <div class="flex-grow-1">
+            <div class="fw-semibold">Aira · ColourCoats</div>
+            <div class="small text-white-50">Usually replies in a few seconds</div>
+        </div>
+        <button class="btn btn-sm btn-outline-light" type="button" id="chatReset" title="Start a new conversation" aria-label="Start a new conversation">
+            <i class="bi bi-arrow-counterclockwise"></i></button>
+        <button class="btn btn-sm btn-outline-light" type="button" id="chatClose" aria-label="Close chat"><i class="bi bi-x-lg"></i></button>
+    </div>
+    <div class="chat-body" id="chatBody" aria-live="polite"></div>
+    <div class="chat-footer">
+        <form id="chatForm" class="d-flex gap-2 align-items-end" autocomplete="off">
+            <label for="chatInput" class="visually-hidden">Your message</label>
+            <textarea id="chatInput" class="form-control" rows="1" maxlength="2000" placeholder="Ask about finishes, or tell us about your project…"></textarea>
+            <button class="btn btn-clay" type="submit" id="chatSend" aria-label="Send"><i class="bi bi-send"></i></button>
+        </form>
+    </div>
+</section>
+
+<script th:replace="~{fragments :: bootstrapJs}"></script>
+<!-- Same opener as the SalesIQ bot (salesiq.opener); Thymeleaf escapes it for JavaScript. -->
+<script th:inline="javascript">window.CC_OPENER = /*[[${opener}]]*/ "";</script>
+<script th:src="@{/js/chat.js}" defer></script>
+
+<!-- Zoho SalesIQ widget (bottom right) -->
+<th:block th:if="${!#strings.isEmpty(salesiqWidgetCode)}">
+    <script>window.$zoho = window.$zoho || {}; $zoho.salesiq = $zoho.salesiq || {ready: function () {}};</script>
+    <script id="zsiqscript" th:src="@{https://salesiq.zohopublic.in/widget(wc=${salesiqWidgetCode})}" defer></script>
+</th:block>
+</body>
+</html>

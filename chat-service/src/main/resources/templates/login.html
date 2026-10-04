@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments :: head('Sign in · ColourCoats lead console')}"></head>
+<body>
+<main class="login-wrap">
+    <div class="card login-card shadow-lg">
+        <div class="card-body p-4 p-md-5">
+            <h1 class="brand-serif h2 mb-1">ColourCoats</h1>
+            <p class="text-secondary mb-4">Lead console · operators only</p>
+            <div class="alert alert-danger py-2" th:if="${param.error}" role="alert">
+                <i class="bi bi-exclamation-triangle me-1"></i>Incorrect username or password.</div>
+            <div class="alert alert-success py-2" th:if="${param.logout}" role="status">
+                <i class="bi bi-check-circle me-1"></i>You have been signed out.</div>
+            <form th:action="@{/login}" method="post">
+                <div class="mb-3">
+                    <label class="form-label" for="username">Username</label>
+                    <input class="form-control" id="username" name="username" autocomplete="username" required autofocus>
+                </div>
+                <div class="mb-4">
+                    <label class="form-label" for="password">Password</label>
+                    <input class="form-control" id="password" name="password" type="password" autocomplete="current-password" required>
+                </div>
+                <button class="btn btn-clay w-100" type="submit"><i class="bi bi-box-arrow-in-right me-1"></i>Sign in</button>
+            </form>
+        </div>
+    </div>
+</main>
+</body>
+</html>
