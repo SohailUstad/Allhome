@@ -95,7 +95,7 @@ flowchart TB
 
 | Package | Responsibility | Key classes |
 |---|---|---|
-| `salesiq` | SalesIQ request/response format, 3.8 s deadline, live transfer (`forward`), optional RSA signature check | `SalesIqWebhookController`, `SalesIqSignatureVerifier` |
+| `salesiq` | SalesIQ request/response format, 3.8 s deadline (SalesIQ waits 5 s), live transfer (`forward`) | `SalesIqWebhookController` |
 | `chat` | One reply: retrieval, model call, JSON parsing, handoff rules, lead merge, saving | `ChatService`, `HandoffPolicy`, `Lead`, `ChatRepository` |
 | `retrieval` | Hybrid search over the active knowledge version | `KnowledgeSearch`, `ReciprocalRankFusion` |
 | `ingestion` | Upload, validate, embed and version knowledge; one active version per dataset | `IngestionService`, `KnowledgeArchiveReader` |
@@ -145,6 +145,9 @@ sequenceDiagram
   only from the known labels; status is computed: QUALIFIED = name + phone + city + persona + requirement.
 - **Handoff:** the model decides (continue → offer → handoff); `HandoffPolicy` forces it for explicit requests for a
   person or call and for complaints. On SalesIQ a handoff becomes a live transfer and the reply loses its question.
+- **Why 3.8 s:** SalesIQ waits at most 5 s for a webhook answer (Zoho's documented limit); 3.8 s for the agent leaves
+  about 1.2 s for the network both ways and for reading and writing the request. A judgement, configurable as
+  `salesiq.response-deadline-ms`.
 - **Failure paths:** unparseable model output → fallback reply + handoff; slower than 3.8 s → holding message +
   handoff; SalesIQ always gets a valid answer.
 - **Each stored reply records** the model, prompt version and model change that produced it.
@@ -366,16 +369,21 @@ sequenceDiagram
 | `/api/**` | Stateless HTTP Basic (operator); public: `POST /api/chat`, `POST /api/salesiq/webhook`, health, info |
 | Console (`/leads`, `/prompts`, `/agent-model`, `/evals`) | Form login with session and CSRF tokens |
 | Secrets | Secret Manager, injected as environment variables; never in git or the image |
-| SalesIQ webhook | RSA signature verification implemented (enabled by setting `SALESIQ_PUBLIC_KEYS`) |
+| SalesIQ webhook | **Not authenticated** in this demo: SalesIQ's webhook signing ("Secure your webhook") is not set up (see README, Limitations) |
 | Untrusted text | Visitor messages and knowledge are data, not instructions (locked prompt rule); pages escape all text; CSV export neutralises spreadsheet formulas |
 
 ## 10. Observability
+
+**How logs reach Cloud Logging:** nothing in the code sends logs anywhere. Cloud Run collects whatever the container
+writes to its console and stores it in Cloud Logging. In the `cloud` profile every log line, including the flow log, is
+written to the console as one JSON object (ECS format), so each field (`request_id`, `flow_step`, the payloads) is
+searchable under `jsonPayload`. Locally the same lines go to `chat-service/logs/chat-service.jsonl`.
 
 | Question | Where to look |
 |---|---|
 | What exactly did SalesIQ send and receive? | Flow log `salesiq.request` / `salesiq.response` |
 | What did the model get and return, with which model and prompt version? | Flow log `openai.request` (prompt, model, `model_change_id`, prompt version) / `openai.response` (raw JSON, tokens, duration) |
-| One message across all steps | Filter the flow log by `request_id` (also the `X-Request-Id` header) or `conversation_id` |
+| One message across all steps | Cloud Logging, Logs Explorer: `jsonPayload.request_id="<id>"` (also the `X-Request-Id` header) or `jsonPayload.conversation_id` |
 | A conversation and its lead | Lead console `/leads/{id}`: transcript with model and prompt version per reply |
 | What knowledge would be retrieved? | `GET /api/search?q=…` |
 | Which code is running? | `/actuator/info` (version + commit) |
