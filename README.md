@@ -61,6 +61,21 @@ Search is hybrid: vector search (closeness in meaning) plus PostgreSQL full-text
 exact product and place names), merged with Reciprocal Rank Fusion, over the active versions only. Tuning lives under
 `retrieval.*` in `application.yaml` (`top-k`, `candidates`, `min-similarity`).
 
+## Chat
+
+The chat code (prompt in `chat-service/src/main/resources/prompts/sales-system.md`) is copied from the prototype
+and answers from the active knowledge via the hybrid search above. It needs `OPENAI_API_KEY`
+(model `gpt-4.1-mini`, override with `OPENAI_CHAT_MODEL`).
+
+| Request | Purpose |
+|---|---|
+| `POST /api/chat` `{"message": "...", "conversationId": "<from the previous reply>", "channel": "WEB_CHAT"}` | Public. Omit `conversationId` to start a conversation. Returns the reply, whether it was handed to a human, and the knowledge sources used. |
+| `GET /api/chat/{conversationId}/messages` | Operator login. The conversation's transcript. |
+
+Every request gets an `X-Request-Id`. The flow log (`logs/chat-service.jsonl`, logger `flow`) records each chat turn's
+prompt and model response with that id and the conversation id. It contains personal data; `logging.level.flow: OFF`
+turns it off.
+
 ## Tests
 
 ```

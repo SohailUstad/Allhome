@@ -5,8 +5,10 @@ import static org.springframework.security.config.Customizer.withDefaults;
 import jakarta.servlet.DispatcherType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -18,10 +20,12 @@ import org.springframework.security.provisioning.InMemoryUserDetailsManager;
 import org.springframework.security.web.SecurityFilterChain;
 
 /**
- * HTTP Basic login for the operator; only the health check is public. The API is stateless (no sessions or cookies),
+ * HTTP Basic login for the operator; public: the health check and the website chat API ({@code POST /api/chat}).
+ * The API is stateless (no sessions or cookies),
  * so CSRF protection, which guards cookie-based sessions, is not needed.
  */
 @Configuration(proxyBeanMethods = false)
+@ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET) // evals run without a web server
 class SecurityConfiguration {
 
 	static final String OPERATOR_ROLE = "OPERATOR";
@@ -34,6 +38,8 @@ class SecurityConfiguration {
 			.authorizeHttpRequests(requests -> requests
 				.dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
 				.requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
+				.requestMatchers(HttpMethod.GET, "/api/chat/*/messages").hasRole(OPERATOR_ROLE)
+				.requestMatchers(HttpMethod.POST, "/api/chat").permitAll()
 				.requestMatchers("/api/ingestions", "/api/ingestions/**", "/api/search").hasRole(OPERATOR_ROLE)
 				.anyRequest().authenticated())
 			.httpBasic(withDefaults())

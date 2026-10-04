@@ -1,9 +1,13 @@
-# Tests never call OpenAI: the real embedding model is off and TestAiConfiguration provides a fake.
+# Tests never call OpenAI: the real models are off and TestAiConfiguration provides fakes.
 spring:
   ai:
     model:
       embedding: none
+      chat: none
 
 operator:
   username: test-operator
   password: test-password
+
+chat:
+  warm-up: false
