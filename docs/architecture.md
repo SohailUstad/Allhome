@@ -127,7 +127,7 @@ sequenceDiagram
     WH->>DB: conversation + visitor message
     WH->>CS: chat() on a worker, 3.8 s deadline
     CS->>DB: last 20 messages, lead so far
-    CS->>P: active prompt (memory; DB check ≤ every 30 s)
+    CS->>P: active prompt (memory, DB check at most every 30 s)
     CS->>M: live model (memory)
     CS->>KS: hybrid search (previous + current message)
     KS->>DB: vector + full-text over the active version
@@ -289,7 +289,7 @@ erDiagram
 ## 6. Knowledge pipeline
 
 ```mermaid
-flowchart LR
+flowchart TB
     A[colourcoats.com] -->|list_pages.py<br/>robots.txt, raw HTML| B[raw_pages/]
     B -->|list_pages.py --stage knowledge<br/>structure-aware chunks ≤300 words| C[knowledge/chunks.jsonl]
     P[brochure-2026.pdf] -->|pdf_knowledge.py<br/>text layer, page links| D[knowledge/pdf_chunks.jsonl]
