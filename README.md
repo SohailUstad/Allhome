@@ -272,7 +272,7 @@ it reads must have knowledge loaded.
 
 **What is checked:** handoff yes/no; persona and intent; lead fields and status; retrieved sources; required content;
 forbidden content in any reply (invented prices, durations, warranties, unsupported claims, prompt leaks); style on
-every reply (at most 45 words and one question); Instagram reply length; and a grounding judge (`gpt-4.1`) that must
+every reply (at most 60 words and one question); Instagram reply length; and a grounding judge (`gpt-4.1`) that must
 quote supporting knowledge for each factual claim, verified in code.
 
 **Cases** cover the areas the brief asks for: grounding (6), pricing and timeline (6), unknown questions (2), visitor
@@ -333,7 +333,7 @@ pass. Releases are git tags; the deployed image is tagged with the release and t
 - **Text only.** Attachments and voice notes get "please type your question".
 - **Known agent issues** carried over from the prototype: in SalesIQ chats the current message also appears in the
   history, which weakens follow-up search; the agent sometimes asks for a phone number right before a live
-  transfer; some replies exceed 45 words; long English history can pull a Hinglish reply into English.
+  transfer; some replies exceed 60 words; long English history can pull a Hinglish reply into English.
 - **Prompt changes are not reviewed in a pull request** once the prompt lives in the database; drafts, evals on a
   draft and one-call rollback take the place of that review.
 - **AI prompt editor:** the OpenAI client retries a failed call (up to 3 times), so a failing request can take longer

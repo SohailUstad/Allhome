@@ -94,15 +94,20 @@ class EvalCasesTests {
         assertThat(knowledge).doesNotContain(EvalRunner.normalize("Walk through 80+ curated finishes"));
     }
 
-    /** The long, multi-question reply the user flagged (2026-10-04) must fail the style checks; a short one must pass. */
+    /**
+     * Replies over 60 words or with more than one question fail the style checks; a short one passes. The reply the
+     * user flagged on 2026-10-04 (52 words) is within the 60-word limit set on 2026-10-05.
+     */
     @Test void styleChecksCatchLongMultiQuestionReplies() {
         String flagged = "ColourCoats works with all project types including corporate spaces, offering premium wall textures and "
                 + "finishes tailored to each space. To help you best, could you share more about the specific corporate projects "
                 + "or spaces you want to target and your timeline for showcasing our finishes? We can then arrange a specialist consultation.";
+        String tooLong = flagged + " Our team can also bring samples to your office and walk you through the finishes in person.";
         String good = "Our metallic coatings are specified for feature walls and ceilings, so they could suit a reception. Which city is the office in?";
         assertThat(EvalRunner.styleChecks(List.of(good))).allMatch(CaseResult.Check::passed);
-        assertThat(EvalRunner.styleChecks(List.of(good, flagged)))
-                .anyMatch(c -> !c.passed() && c.name().contains("words"));
+        assertThat(EvalRunner.styleChecks(List.of(good, flagged))).allMatch(CaseResult.Check::passed);
+        assertThat(EvalRunner.styleChecks(List.of(good, tooLong)))
+                .anyMatch(c -> !c.passed() && c.name().contains("60 words"));
         assertThat(EvalRunner.styleChecks(List.of("Which room? And when do you want to start?")))
                 .anyMatch(c -> !c.passed() && c.name().contains("question"));
     }

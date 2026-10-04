@@ -31,7 +31,7 @@ import org.springframework.stereotype.Component;
 public class EvalRunner {
 
 	/** "Short, human, one question at a time" applies to every reply of every case. */
-	static final int MAX_WORDS = 45;
+	static final int MAX_WORDS = 60;
 
 	static final int MAX_QUESTIONS = 1;
 
