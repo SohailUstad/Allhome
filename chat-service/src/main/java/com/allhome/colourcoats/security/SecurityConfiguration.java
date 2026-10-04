@@ -53,6 +53,7 @@ public class SecurityConfiguration {
 				// Authenticated by SalesIQ's RSA signature (salesiq.public-keys), not by login.
 				.requestMatchers(HttpMethod.POST, "/api/salesiq/webhook").permitAll()
 				.requestMatchers("/api/ingestions", "/api/ingestions/**", "/api/search").hasRole(OPERATOR_ROLE)
+				.requestMatchers("/api/prompts", "/api/prompts/**").hasRole(OPERATOR_ROLE)
 				.anyRequest().authenticated())
 			.httpBasic(withDefaults())
 			.sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))

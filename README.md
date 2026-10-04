@@ -45,7 +45,7 @@ panel uses as well. Replacing SalesIQ would mean replacing only the webhook adap
 | Path | What it is |
 |---|---|
 | `chat-service/` | Spring Boot 4 service: Java 21, PostgreSQL 17 + pgvector, JPA, Flyway, Spring AI 2 (OpenAI) |
-| `chat-service/src/main/resources/prompts/sales-system.md` | The agent's system prompt |
+| `chat-service/src/main/resources/prompts/sales-system.md` | The agent's first system prompt; afterwards versioned in the database (`prompt_version`) |
 | `chat-service/src/main/resources/application.yaml` | All tunable settings (model, retrieval, SalesIQ, deadlines) |
 | `chat-service/src/main/resources/db/migration/` | Database schema as versioned Flyway migrations |
 | `chat-service/src/test/resources/evals/cases.json` | The eval cases |
@@ -55,7 +55,7 @@ panel uses as well. Replacing SalesIQ would mean replacing only the webhook adap
 | `.github/workflows/ci.yml` | CI: all tests on every pull request and on `main` |
 
 Package overview (`com.allhome.colourcoats`): `ingestion` (knowledge upload and versions), `retrieval` (hybrid
-search), `chat` (agent, leads, transcripts), `salesiq` (webhook), `operator` (lead console), `web` (demo site),
+search), `chat` (agent, leads, transcripts), `prompt` (versioned system prompt), `salesiq` (webhook), `operator` (lead console), `web` (demo site),
 `security`, `flowlog` (request ids and the flow log).
 
 ## Setup
@@ -164,7 +164,7 @@ How the agent is configured and changed:
 
 | What | Where | How a change is made and verified |
 |---|---|---|
-| Behaviour (tone, grounding, qualification, handoff rules) | `prompts/sales-system.md` | Pull request; CI; `./mvnw test -Pevals` before and after |
+| Behaviour (tone, grounding, qualification, handoff rules) | System prompt versions in the database (`prompt_version`); version 1 is `prompts/sales-system.md` | Draft via `/api/prompts`, `./mvnw test -Pevals -Deval.prompt=<draft id>`, then activate; rollback = activate an earlier version |
 | Handoff safety net (explicit requests for a person or call, complaints) | `chat/HandoffPolicy.java` | Unit tests (`HandoffPolicyTests`) |
 | Model, retrieval sizes, deadlines, SalesIQ messages | `application.yaml` (most also as environment variables) | Model: `OPENAI_CHAT_MODEL`, changeable on Cloud Run without a rebuild |
 | Knowledge | Uploaded versions | `/api/search` to inspect; activate an earlier version to roll back |
@@ -222,6 +222,7 @@ conversations and check each reply automatically:
 cd chat-service
 ./mvnw test -Pevals                              # all cases; report in target/evals/latest.md (+ latest.json)
 ./mvnw test -Pevals -Deval.case=pricing-handoff  # one case
+./mvnw test -Pevals -Deval.prompt=<version id>   # a prompt draft before activating it (default: active; file: the git file)
 # options: -Deval.repeat=3  -Deval.judge=false  -Deval.minPassRate=0.85
 ```
 
@@ -253,6 +254,9 @@ on) and at least 85% of all checks must pass; otherwise the build fails. A free 
 | `GET /api/ingestions[?datasetId=]` | Operator | Stored knowledge versions |
 | `POST /api/ingestions/{runId}/activate` | Operator | Roll back to an earlier version |
 | `GET /api/search?q=` | Operator | What the agent would retrieve |
+| `GET /api/prompts`, `GET /api/prompts/active`, `GET /api/prompts/{id}` | Operator | System prompt versions, with their sections and locks |
+| `POST /api/prompts` `{"sections":{"<key>":"<text>"}, "note", "confirmProtected"}`, `PATCH /api/prompts/{id}` | Operator | Start a draft from the active version / change a draft: `400` if a section is locked, empty, or protected without confirmation |
+| `POST /api/prompts/{id}/activate`, `POST /api/prompts/{id}/discard` | Operator | Make a version active, also for rollback (`409` if the active version changed since the draft was started) / throw a draft away |
 | `/`, `/leads`, `/leads/export.csv` | Public / operator | Demo site, lead console, CSV export |
 | `/actuator/health`, `/actuator/info` | Public | Health, running version |
 
@@ -286,7 +290,8 @@ pass. Releases are git tags; the deployed image is tagged with the release and t
 - **Known agent issues** carried over from the prototype: in SalesIQ chats the current message also appears in the
   history, which weakens follow-up search; the agent sometimes asks for a phone number right before a live
   transfer; some replies exceed 45 words; long English history can pull a Hinglish reply into English.
-- **Changing the prompt needs a release and deploy** (deliberately: reviewed, tested, versioned).
+- **Prompt changes are not reviewed in a pull request** once the prompt lives in the database; drafts, evals on a
+  draft and one-call rollback take the place of that review.
 - **Knowledge refresh is manual** (crawl, package, upload).
 - **Demo-sized infrastructure:** one Cloud Run instance, smallest Cloud SQL tier without backups, one operator
   account, no rate limiting.
@@ -301,7 +306,6 @@ pass. Releases are git tags; the deployed image is tagged with the release and t
 - Async ("pending") replies for slow website answers; pass operator availability to the agent; handle SalesIQ failure
   events (1001/1002/1007) with an offline flow instead of the greeting.
 - Push qualified leads to Zoho CRM (or email/WhatsApp alerts) instead of only the console and CSV.
-- Operator-editable prompt versions stored in the database, activated only after an eval run, with rollback.
 - Scheduled re-crawl that uploads a new knowledge version only when content changed.
 - Nightly evals in CI with the API key as a secret, and a trend of pass rates per prompt version.
 - Production hardening: autoscaling, Cloud SQL backups and private IP, multiple operator accounts and roles, rate

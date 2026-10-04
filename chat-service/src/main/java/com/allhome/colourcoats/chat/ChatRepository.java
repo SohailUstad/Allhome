@@ -36,16 +36,25 @@ public class ChatRepository {
                 .param("c", conversationId).param("content", content).update();
     }
 
-    @Transactional
+    /** A fixed message (fallback, busy, transfer), not written by the model. */
     public void saveAssistantMessage(UUID conversationId, String content, boolean handoff, List<ChatSource> sources,
                                      String model, Integer promptTokens, Integer completionTokens) {
+        saveAssistantMessage(conversationId, content, handoff, sources, model, promptTokens, completionTokens, null);
+    }
+
+    /** @param promptVersionId the system prompt version that produced the reply */
+    @Transactional
+    public void saveAssistantMessage(UUID conversationId, String content, boolean handoff, List<ChatSource> sources,
+                                     String model, Integer promptTokens, Integer completionTokens, UUID promptVersionId) {
         jdbc.sql("""
-                INSERT INTO chat_message (conversation_id, role, content, handoff, sources, model, prompt_tokens, completion_tokens)
-                VALUES (:c, 'ASSISTANT', :content, :handoff, CAST(:sources AS JSONB), :model, :pt, :ct)
+                INSERT INTO chat_message (conversation_id, role, content, handoff, sources, model, prompt_tokens,
+                                          completion_tokens, prompt_version_id)
+                VALUES (:c, 'ASSISTANT', :content, :handoff, CAST(:sources AS JSONB), :model, :pt, :ct, :pv)
                 """)
                 .param("c", conversationId).param("content", content).param("handoff", handoff)
                 .param("sources", json.writeValueAsString(sources))
                 .param("model", model).param("pt", promptTokens).param("ct", completionTokens)
+                .param("pv", promptVersionId)
                 .update();
     }
 

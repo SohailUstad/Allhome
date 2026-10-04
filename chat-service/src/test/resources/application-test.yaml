@@ -11,3 +11,7 @@ operator:
 
 chat:
   warm-up: false
+
+# Tests reset the prompt tables between tests; never serve a cached version that no longer exists.
+prompt:
+  refresh-interval: 0s
