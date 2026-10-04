@@ -23,6 +23,16 @@ Python 3.9+, standard library only (nothing to install).
    Writes `knowledge/chunks.jsonl` (one retrieval chunk per line), a `.json`/`.md` file per page and `manifest.json`.
    `--chunk-words` sets the maximum words per chunk body (default 300).
 
+3. Package the chunks for the Spring app's ingestion endpoint:
+
+   ```
+   python package_knowledge.py               # knowledge/chunks.jsonl -> colourcoats-knowledge.zip
+   ```
+
+   Validates every chunk (`id`, `document_id`, `text`, `url` present; unique ids; at most 8000 bytes of text)
+   and writes a zip with `manifest.json` and `chunks.jsonl`. Options: `--chunks`, `--output`, `--dataset-id`,
+   `--dataset-version` (default: today), `--source`.
+
 Generated files are git-ignored; rerun the scripts to rebuild them.
 
 ## Tests
