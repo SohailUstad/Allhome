@@ -24,9 +24,10 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 @Controller
 @RequestMapping("/leads")
 public class OperatorController {
-    private com.allhome.colourcoats.flowlog.RunJournal journal = com.allhome.colourcoats.flowlog.RunJournal.transientJournal();
-    @org.springframework.beans.factory.annotation.Autowired
-    public void observability(com.allhome.colourcoats.flowlog.RunJournal journal) { this.journal = journal; }
+    private org.springframework.transaction.support.TransactionOperations transaction =
+            org.springframework.transaction.support.TransactionOperations.withoutTransaction();
+    @org.springframework.beans.factory.annotation.Autowired(required = false) // absent in web-slice tests
+    public void transactions(org.springframework.transaction.support.TransactionOperations transaction) { this.transaction = transaction; }
     static final int PAGE_SIZE = 25;
     private final LeadRepository leads;
     private final ChatRepository chats;
@@ -52,7 +53,6 @@ public class OperatorController {
         model.addAttribute("personas", Lead.PERSONAS.stream().sorted().toList());
         model.addAttribute("intents", Lead.INTENTS.stream().sorted().toList());
         model.addAttribute("channels", Channel.values());
-        journal.audit("operator.leads.viewed", java.util.Map.of("page", filter.page()));
         return "leads";
     }
 
@@ -63,7 +63,6 @@ public class OperatorController {
         model.addAttribute("messages", leads.messages(id));
         model.addAttribute("whatsapp", whatsappNumber(lead.phone()));
         model.addAttribute("personas", Lead.PERSONAS.stream().filter(p -> !p.equals("UNKNOWN")).sorted().toList());
-        journal.audit("operator.transcript.viewed", java.util.Map.of("conversation_id", id));
         return "lead-detail";
     }
 
@@ -74,19 +73,16 @@ public class OperatorController {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unknown persona");
         }
         leads.find(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Unknown conversation"));
-        journal.atomic(() -> {
-            chats.saveLead(id, chats.findLead(id).merge(persona, null, null));
-            journal.audit("operator.persona.changed", java.util.Map.of("conversation_id", id, "persona", persona));
-        });
+        transaction.executeWithoutResult(status ->
+            chats.saveLead(id, chats.findLead(id).merge(persona, null, null)));
         redirect.addFlashAttribute("notice", "Persona updated.");
         return "redirect:/leads/" + id;
     }
 
     @PostMapping("/{id}/handled")
     public String toggleHandled(@PathVariable UUID id, RedirectAttributes redirect) {
-        journal.atomic(() -> {
+        transaction.executeWithoutResult(status -> {
             if (!leads.toggleHandled(id)) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Unknown conversation");
-            journal.audit("operator.handoff.handled", java.util.Map.of("conversation_id", id));
         });
         redirect.addFlashAttribute("notice", "Follow-up status updated.");
         return "redirect:/leads/" + id;
@@ -120,7 +116,6 @@ public class OperatorController {
             csv.append("\r\n");
         }
         String file = "colourcoats-leads-" + LocalDate.now().format(DateTimeFormatter.ISO_DATE) + ".csv";
-        journal.audit("operator.leads.exported", java.util.Map.of("row_count", rows.size()));
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + file + "\"")
                 .contentType(new MediaType("text", "csv", StandardCharsets.UTF_8))

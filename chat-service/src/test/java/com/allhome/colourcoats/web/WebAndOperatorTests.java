@@ -8,7 +8,7 @@ import com.allhome.colourcoats.operator.LeadFilter;
 import com.allhome.colourcoats.operator.LeadRepository;
 import com.allhome.colourcoats.operator.OperatorController;
 import com.allhome.colourcoats.web.PageController;
-import com.allhome.colourcoats.web.SecurityConfig;
+import com.allhome.colourcoats.security.SecurityConfiguration;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -32,15 +32,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /** Renders the real Thymeleaf templates through the real security rules (repositories mocked). */
 @WebMvcTest(controllers = {PageController.class, OperatorController.class, ChatController.class},
         properties = {"operator.username=op", "operator.password=secret-pass", "salesiq.widget-code=siqTESTCODE"})
-@Import({SecurityConfig.class, WebAndOperatorTests.TelemetryConfiguration.class})
+@Import(SecurityConfiguration.class)
 class WebAndOperatorTests {
-    @org.springframework.boot.test.context.TestConfiguration(proxyBeanMethods = false)
-    static class TelemetryConfiguration {
-        @org.springframework.context.annotation.Bean
-        com.allhome.colourcoats.flowlog.Telemetry telemetry() { return com.allhome.colourcoats.flowlog.Telemetry.local(); }
-        @org.springframework.context.annotation.Bean
-        com.allhome.colourcoats.flowlog.RunJournal journal() { return com.allhome.colourcoats.flowlog.RunJournal.transientJournal(); }
-    }
     @Autowired MockMvc mvc;
     @MockitoBean LeadRepository leads;
     @MockitoBean ChatService chatService;
