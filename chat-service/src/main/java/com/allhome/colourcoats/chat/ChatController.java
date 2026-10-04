@@ -13,9 +13,6 @@ import org.springframework.web.server.ResponseStatusException;
 @RestController
 @RequestMapping("/api/chat")
 public class ChatController {
-    private com.allhome.colourcoats.flowlog.RunJournal journal = com.allhome.colourcoats.flowlog.RunJournal.transientJournal();
-    @org.springframework.beans.factory.annotation.Autowired
-    public void observability(com.allhome.colourcoats.flowlog.RunJournal journal) { this.journal = journal; }
     private final ChatService chatService;
     private final ChatRepository repository;
 
@@ -35,9 +32,7 @@ public class ChatController {
     @GetMapping("/{conversationId}/messages")
     public List<ChatRepository.StoredMessage> history(@PathVariable UUID conversationId) {
         if (!repository.exists(conversationId)) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Unknown conversation");
-        var messages = repository.recentMessages(conversationId, 500);
-        journal.audit("operator.transcript.viewed", java.util.Map.of("conversation_id", conversationId));
-        return messages;
+        return repository.recentMessages(conversationId, 500);
     }
 
     public record Request(UUID conversationId, @NotBlank @Size(max = 2000) String message, Channel channel) {}

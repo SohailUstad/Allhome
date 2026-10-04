@@ -1,9 +1,8 @@
 package com.allhome.colourcoats.chat;
 
-import com.allhome.colourcoats.chat.*;
-import com.allhome.colourcoats.ingestion.ApiErrors;
+import com.allhome.colourcoats.retrieval.KnowledgeSearch;
+import com.allhome.colourcoats.retrieval.RetrievedChunk;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -14,13 +13,11 @@ import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.model.Generation;
 import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.chat.prompt.Prompt;
-import org.springframework.ai.document.Document;
-import org.springframework.ai.vectorstore.SearchRequest;
-import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.transaction.support.TransactionOperations;
 import static org.assertj.core.api.Assertions.*;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.not;
@@ -30,17 +27,16 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 class ChatTests {
     final ChatModel model = mock(ChatModel.class);
-    final VectorStore store = mock(VectorStore.class);
+    final KnowledgeSearch search = mock(KnowledgeSearch.class);
     final ChatRepository repository = mock(ChatRepository.class);
-    final KeywordRetriever keywords = mock(KeywordRetriever.class);
     final MockMvc mvc = mvc();
 
     MockMvc mvc() {
         when(model.getOptions()).thenReturn(ChatOptions.builder().build());
         when(repository.findLead(any())).thenReturn(Lead.EMPTY);
         try {
-            var service = new ChatService(ChatClient.builder(model), store, keywords, repository,
-                    new ByteArrayResource("SYSTEM PROMPT {not a template}".getBytes()), 20, 6, 0.3, 3, true, "Connecting you now.");
+            var service = new ChatService(ChatClient.builder(model), search, repository, TransactionOperations.withoutTransaction(),
+                    new ByteArrayResource("SYSTEM PROMPT {not a template}".getBytes()), 20, true, "Connecting you now.");
             return MockMvcBuilders.standaloneSetup(new ChatController(service, repository))
                     .setControllerAdvice(new ApiErrors()).build();
         } catch (Exception e) {
@@ -59,11 +55,9 @@ class ChatTests {
                 new ChatRepository.StoredMessage("ASSISTANT", "Lovely! Interior or exterior?", null)));
         when(repository.findLead(id)).thenReturn(Lead.EMPTY.merge("HOMEOWNER", "PLANNING_PROJECT",
                 new ModelAnswer.LeadDetails(null, null, null, "Pune", "repaint", null, null, null, null, null, null)));
-        when(store.similaritySearch(any(SearchRequest.class))).thenReturn(List.of(
-                Document.builder().id("c1").text("Anti-fungal systems for the monsoon-facing side.").score(0.61)
-                        .metadata(Map.of("chunk_id", "abc", "url", "https://www.colourcoats.com/",
-                                "source_urls", List.of("https://www.colourcoats.com/#svc-painting"),
-                                "heading_path", List.of("IV · Painting Works", "Overview"))).build()));
+        when(search.search(any())).thenReturn(List.of(chunk("Anti-fungal systems for the monsoon-facing side.",
+                "https://www.colourcoats.com/", List.of("IV · Painting Works", "Overview"),
+                List.of("https://www.colourcoats.com/#svc-painting"))));
         modelReturns("""
                 {"reply":"We offer anti-fungal systems for the monsoon-facing side.","handoff":false,"handoffReason":null,
                  "persona":"HOMEOWNER","intent":"PLANNING_PROJECT",
@@ -80,10 +74,7 @@ class ChatTests {
                 .andExpect(jsonPath("$.sources[0].url").value("https://www.colourcoats.com/#svc-painting"))
                 .andExpect(jsonPath("$.sources[0].section").value("IV · Painting Works > Overview"));
 
-        var search = ArgumentCaptor.forClass(SearchRequest.class);
-        verify(store).similaritySearch(search.capture());
-        assertThat(search.getValue().getQuery()).isEqualTo("We are repainting our villa in Pune\nexterior walls");
-        assertThat(search.getValue().getTopK()).isEqualTo(6);
+        verify(search).search("We are repainting our villa in Pune\nexterior walls");
 
         var prompt = ArgumentCaptor.forClass(Prompt.class);
         verify(model).call(prompt.capture());
@@ -112,7 +103,7 @@ class ChatTests {
     }
 
     @Test void liveTransferReplyDropsQuestionAndTranscriptMatchesWhatVisitorSaw() throws Exception {
-        when(store.similaritySearch(any(SearchRequest.class))).thenReturn(List.of());
+        when(search.search(any())).thenReturn(List.of());
         modelReturns("{\"reply\":\"I don't have info about our founder here, but I can connect you with someone who can share more. "
                 + "Meanwhile, what kind of project are you thinking about?\",\"handoff\":true,\"handoffReason\":\"Founder question\"}");
         String expected = "I don't have info about our founder here, but I can connect you with someone who can share more.";
@@ -124,7 +115,7 @@ class ChatTests {
     }
 
     @Test void webChatHandoffKeepsItsQuestionBecauseNobodyTakesOver() throws Exception {
-        when(store.similaritySearch(any(SearchRequest.class))).thenReturn(List.of());
+        when(search.search(any())).thenReturn(List.of());
         modelReturns("{\"reply\":\"A specialist will share a quote. What's your name and number?\",\"handoff\":true}");
         mvc.perform(post("/api/chat").contentType(MediaType.APPLICATION_JSON)
                         .content("{\"message\":\"price?\",\"channel\":\"WEB_CHAT\"}"))
@@ -132,7 +123,7 @@ class ChatTests {
     }
 
     @Test void unansweredQuestionIsHandedOffAndContactQualifiesLead() throws Exception {
-        when(store.similaritySearch(any(SearchRequest.class))).thenReturn(List.of());
+        when(search.search(any())).thenReturn(List.of());
         modelReturns("""
                 ```json
                 {"reply":"I don't have pricing information. A specialist will call you.","handoff":true,
@@ -152,7 +143,7 @@ class ChatTests {
     }
 
     @Test void unparseableModelOutputIsNeverShownAndHandsOff() throws Exception {
-        when(store.similaritySearch(any(SearchRequest.class))).thenReturn(List.of());
+        when(search.search(any())).thenReturn(List.of());
         modelReturns("Sure! Our exterior paint costs Rs 40/sqft");
         mvc.perform(post("/api/chat").contentType(MediaType.APPLICATION_JSON).content("{\"message\":\"price?\"}"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.handoff").value(true))
@@ -161,30 +152,27 @@ class ChatTests {
         verify(repository).saveLead(any(), eq(Lead.EMPTY));
     }
 
-    @Test void mergesKeywordMatchesWithVectorMatchesWithoutDuplicates() throws Exception {
-        var shared = Document.builder().id("row-1").text("Lime plaster, Calceterra, Marmorino").score(0.5)
-                .metadata(Map.of("chunk_id", "marmorino-chunk", "url", "https://www.colourcoats.com/#svc-limewash")).build();
-        var sameChunkOtherRow = Document.builder().id("row-2").text("Lime plaster, Calceterra, Marmorino")
-                .metadata(Map.of("chunk_id", "marmorino-chunk", "url", "https://www.colourcoats.com/#svc-limewash")).build();
-        var keywordOnly = Document.builder().id("row-3").text("ColourCoats Kolkata Experience Centre, Tiljala")
-                .metadata(Map.of("chunk_id", "kolkata-chunk", "url", "https://www.colourcoats.com/#studio")).build();
-        when(store.similaritySearch(any(SearchRequest.class))).thenReturn(List.of(shared));
-        when(keywords.search(any(), eq(3))).thenReturn(List.of(sameChunkOtherRow, keywordOnly));
+    @Test void searchResultsReachTheModelAndSourcesInOrder() throws Exception {
+        when(search.search(any())).thenReturn(List.of(
+                chunk("Lime plaster, Calceterra, Marmorino", "https://www.colourcoats.com/", List.of("Lime"),
+                        List.of("https://www.colourcoats.com/#svc-limewash")),
+                chunk("ColourCoats Kolkata Experience Centre, Tiljala", "https://www.colourcoats.com/", List.of("Studio"),
+                        List.of("https://www.colourcoats.com/#studio"))));
         modelReturns("{\"reply\":\"Yes, Marmorino is one of our wall textures.\",\"handoff\":false}");
 
         mvc.perform(post("/api/chat").contentType(MediaType.APPLICATION_JSON).content("{\"message\":\"Marmorino in Kolkata?\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.sources.length()").value(2))
-                .andExpect(jsonPath("$.sources[0].chunkId").value("marmorino-chunk"))
-                .andExpect(jsonPath("$.sources[1].chunkId").value("kolkata-chunk"));
-        verify(keywords).search("Marmorino in Kolkata?", 3);
+                .andExpect(jsonPath("$.sources[0].url").value("https://www.colourcoats.com/#svc-limewash"))
+                .andExpect(jsonPath("$.sources[1].url").value("https://www.colourcoats.com/#studio"));
+        verify(search).search("Marmorino in Kolkata?");
         var prompt = ArgumentCaptor.forClass(Prompt.class);
         verify(model).call(prompt.capture());
         assertThat(prompt.getValue().getInstructions().getLast().getText()).contains("Tiljala", "Marmorino");
     }
 
     @Test void startsNewConversationWhenIdOmitted() throws Exception {
-        when(store.similaritySearch(any(SearchRequest.class))).thenReturn(List.of());
+        when(search.search(any())).thenReturn(List.of());
         modelReturns("{\"reply\":\"Hi!\",\"handoff\":false}");
         mvc.perform(post("/api/chat").contentType(MediaType.APPLICATION_JSON).content("{\"message\":\"hello\"}"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.conversationId").isNotEmpty())
@@ -199,7 +187,7 @@ class ChatTests {
             mvc.perform(post("/api/chat").contentType(MediaType.APPLICATION_JSON).content(body))
                     .andExpect(status().isBadRequest());
         }
-        verifyNoInteractions(store);
+        verifyNoInteractions(search);
         verify(model, never()).call(any(Prompt.class));
         verify(repository, never()).touchConversation(any(), any());
     }
@@ -210,7 +198,7 @@ class ChatTests {
     }
 
     @Test void providerFailureKeepsUserMessageAndHidesDetails() throws Exception {
-        when(store.similaritySearch(any(SearchRequest.class))).thenReturn(List.of());
+        when(search.search(any())).thenReturn(List.of());
         when(model.call(any(Prompt.class))).thenThrow(new IllegalStateException("secret provider details"));
         mvc.perform(post("/api/chat").contentType(MediaType.APPLICATION_JSON).content("{\"message\":\"hello\"}"))
                 .andExpect(status().isServiceUnavailable())
@@ -238,5 +226,10 @@ class ChatTests {
         assertThat(Lead.EMPTY.merge(null, null, new ModelAnswer.LeadDetails("Anita", "9876543210", null, "Pune",
                 "repaint", null, null, null, null, null, null)).status()).isEqualTo("ENGAGED"); // persona still unknown
         assertThat(Lead.EMPTY.status()).isEqualTo("NEW");
+    }
+
+    static RetrievedChunk chunk(String text, String url, List<String> headingPath, List<String> sourceUrls) {
+        return new RetrievedChunk(UUID.randomUUID(), "colourcoats", "v1", text, url, null, headingPath, sourceUrls, 0.61,
+                RetrievedChunk.Match.VECTOR, 0.016);
     }
 }

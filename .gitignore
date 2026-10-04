@@ -9,3 +9,6 @@
 *.iml
 .DS_Store
 Thumbs.db
+
+# Application logs (the flow log contains personal data)
+logs/

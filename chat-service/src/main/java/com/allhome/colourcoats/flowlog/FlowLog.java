@@ -6,8 +6,7 @@ import org.slf4j.spi.LoggingEventBuilder;
 
 /**
  * Evidence log of one message's round trip: SalesIQ request → OpenAI request → OpenAI response → SalesIQ response.
- * Unlike {@link Telemetry}, this DOES record full payloads (visitor text, prompts, replies), so treat the log file
- * as personal data. Turn it off with {@code logging.level.flow: OFF}.
+ * It records full payloads (visitor text, prompts, replies), so treat the log file as personal data. Turn it off with {@code logging.level.flow: OFF}.
  *
  * Every entry carries request_id (one webhook call, also the X-Request-Id header), conversation_id (all turns of
  * one chat) and, once known, turn_id, so the four steps can be grouped and correlated.

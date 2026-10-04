@@ -26,15 +26,19 @@ spring:
       max-request-size: 11MB
   ai:
     model:
-      # Only embeddings are used so far; the other OpenAI model types stay off until a feature needs them.
+      # Embeddings (knowledge) and chat (replies); the other OpenAI model types stay off.
       embedding: openai
-      chat: none
+      chat: openai
       image: none
       audio.speech: none
       audio.transcription: none
       moderation: none
     openai:
       api-key: ${OPENAI_API_KEY:}
+      chat:
+        model: ${OPENAI_CHAT_MODEL:gpt-4.1-mini}
+        temperature: 0.4
+        max-completion-tokens: 600 # caps latency; replies are short and must fit SalesIQ's 5 s webhook limit
       embedding:
         options:
           model: text-embedding-3-small
@@ -51,6 +55,26 @@ retrieval:
 operator:
   username: ${OPERATOR_USERNAME:operator}
   password: ${OPERATOR_PASSWORD:} # no default: without it nobody can log in
+
+chat:
+  history-size: 20 # previous messages sent to the model each turn
+  warm-up: true # one search + one tiny chat call at startup, so the first visitor's reply is not slow
+
+salesiq:
+  # On handoff, transfer the live chat to a SalesIQ operator ("forward"); the AI then never answers that chat again.
+  forward-on-handoff: true
+  transfer-message: "Let me connect you with one of our specialists, they'll be with you shortly." # timeout/failure while forwarding
+
+logging:
+  # Flow log (logger "flow"): one entry per step of each message, with full payloads (personal data), written as
+  # JSON lines so every field is kept. Turn it off with logging.level.flow: OFF.
+  structured:
+    format:
+      file: ecs
+  file:
+    name: ${LOG_FILE:logs/chat-service.jsonl}
+  level:
+    flow: INFO
 
 server:
   port: ${SERVER_PORT:8080}
