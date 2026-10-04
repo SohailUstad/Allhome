@@ -41,6 +41,32 @@ class PackageKnowledgeTests(unittest.TestCase):
             # Chunks are stored byte for byte as extracted.
             self.assertEqual(archive.read('chunks.jsonl'), self.chunks.read_bytes())
 
+    def test_several_chunk_files_are_combined(self):
+        website, brochure = self.dir / 'website.jsonl', self.dir / 'brochure.jsonl'
+        website.write_text(json.dumps(chunk('a')) + '\n', encoding='utf-8')
+        # The second file starts with a byte-order mark and has no final newline.
+        brochure.write_text('﻿' + json.dumps(chunk('b')), encoding='utf-8')
+        result = subprocess.run([sys.executable, str(SCRIPT), '--chunks', str(website), str(brochure),
+                                 '--output', str(self.output)], capture_output=True, text=True)
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        with ZipFile(self.output) as archive:
+            combined = archive.read('chunks.jsonl').decode('utf-8')
+            self.assertNotIn('﻿', combined)
+            self.assertEqual([json.loads(line)['id'] for line in combined.splitlines()], ['a', 'b'])
+            self.assertEqual(json.loads(archive.read('manifest.json'))['chunk_count'], 2)
+
+    def test_duplicate_ids_across_files_rejected(self):
+        first, second = self.dir / 'first.jsonl', self.dir / 'second.jsonl'
+        first.write_text(json.dumps(chunk('a')) + '\n', encoding='utf-8')
+        second.write_text(json.dumps(chunk('a')) + '\n', encoding='utf-8')
+        result = subprocess.run([sys.executable, str(SCRIPT), '--chunks', str(first), str(second),
+                                 '--output', str(self.output)], capture_output=True, text=True)
+
+        self.assertEqual(result.returncode, 2)
+        self.assertIn('Duplicate chunk id', result.stderr)
+        self.assertFalse(self.output.exists())
+
     def test_invalid_chunks_rejected_without_output(self):
         cases = {
             'Duplicate chunk id': [chunk('a'), chunk('a')],

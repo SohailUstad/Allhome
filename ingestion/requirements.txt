@@ -1,0 +1,2 @@
+# Only pdf_knowledge.py needs a third-party package; the website scripts use the standard library.
+pypdf>=6.0,<7

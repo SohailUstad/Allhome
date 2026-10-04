@@ -7,7 +7,7 @@ website content and hands interested visitors to the team.
 
 | Path | What it is |
 |---|---|
-| `ingestion/` | Python scripts that crawl the website and package its content as knowledge chunks. See [ingestion/README.md](ingestion/README.md). |
+| `ingestion/` | Python scripts that turn the website and the brochure PDF into knowledge chunks and package them. See [ingestion/README.md](ingestion/README.md). |
 | `chat-service/` | Spring Boot 4 service (Java 21, PostgreSQL + pgvector, JPA, Flyway). |
 | `compose.yaml` | Local PostgreSQL with pgvector for development. |
 | `.env.example` | Settings the service reads, with local defaults. |
