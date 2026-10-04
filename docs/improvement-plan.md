@@ -14,21 +14,33 @@ compared against.
 The system prompt is a file inside the jar (`prompts/sales-system.md`, about 14 KB). Changing one sentence means a pull
 request, CI, a tag, a Cloud Build image and a Cloud Run deploy (about 10–15 minutes, plus a person who can run them).
 
-### Design: versioned prompts in PostgreSQL, the same way knowledge is versioned
+### Design: versioned prompts in PostgreSQL, edited in sections, with an AI editing assistant
+
+Agreed design (2026-10-05). The operator never edits the whole prompt in one text box: the console shows it in
+sections, and the operator either edits one section by hand or describes the change and lets an AI propose it.
 
 | Part | Design |
 |---|---|
-| Storage | New table `prompt_version` (Flyway V5): `id`, `name` (`sales-system`), `content`, `sha256`, `note`, `created_by`, `created_at`, `active`. A partial unique index allows exactly one active version per name, the same rule as `ingestion_run`. Every version is kept. |
-| First version | On startup, if no version exists, the current `sales-system.md` is stored as version 1 and activated. The file stays in git as the default and the fallback. |
-| Changing it | Operator-only API: `GET /api/prompts` (versions), `GET /api/prompts/{id}`, `POST /api/prompts` (new version, **not** active), `POST /api/prompts/{id}/activate`, and rollback by activating an earlier version. Saving identical content again returns the existing version (SHA-256), as for knowledge. Optional: a `/prompts` page in the console with an editor and a diff against the active version. |
-| Use | `ChatService` asks a `PromptStore` for the active prompt on every message, instead of reading the file once at startup. |
-| Traceability | The prompt version id is written to the flow log (`openai.request`) and stored on every assistant message (new column `chat_message.prompt_version`). Every reply can be traced to the exact prompt that produced it. |
-| Safety | Content must not be blank, with a size limit (e.g. 50 KB). The JSON output format is still added by the code, so a prompt edit cannot break reply parsing. Only the operator role can change prompts. |
-| Evals | `-Deval.promptVersion=<id>` runs the evals against a version that is **not yet active**. Workflow: create the version, run the evals on it, compare with the active version's report, and activate only if nothing important got worse. |
+| Storage | Table `prompt_version` (Flyway V5): one row per version, holding the sections (`JSONB`), the assembled prompt (`content`), its SHA-256, status `DRAFT` / `ACTIVE` / `ARCHIVED` / `DISCARDED`, the version it was based on, a note, who created it and when. A partial unique index allows exactly one active version per prompt, the same rule as `ingestion_run`. Every version is kept. |
+| Sections | The prompt's own `## ` headings split it into sections (role, input, answer naturally, … output). Each has a stable key, so edits and history refer to the same section even if its title changes. The model always gets the sections joined back into one text. |
+| Locks | Locked (read-only for people and the AI, rejected by the backend): `input` (includes the anti-injection rule) and `output` (the reply format the code parses). Protected (editable after an explicit confirmation): `strict-grounding`, `persona` and `intent` (the code only accepts the listed labels). |
+| First version | On first start the current `sales-system.md` is stored as version 1 and activated. The file stays in git as the default and the fallback. |
+| Use | `ChatService` gets the active prompt from an in-memory cache on every message (see "Caching the prompt"). |
+| Drafts | Edits always go into a draft. Visitors keep getting the active version until the draft is activated. Activating a draft fails (409) if the active version changed since the draft was created. Rollback = activating an earlier version. |
+| AI editor | The operator describes the change (optionally for one section), picks the model and, for reasoning models, the reasoning effort. A separate prompt-editor model with its own fixed instructions (in git) returns structured JSON: the changed sections only, the reason, conflicts with other sections, or a question back. It refuses ColourCoats facts (they belong in the knowledge base) and says when a request needs code. The console shows a diff per section; the operator accepts it into a draft, refines it, or discards it. |
+| Models | The allowed editor models are configured in `application.yaml` (`prompt-editor.models`), each with its settings: standard models run at temperature 0, reasoning models take a reasoning effort and no temperature. The app checks which of them the OpenAI key can use. Same OpenAI key as the chat agent; visitors are always answered by the chat model. |
+| Audit | Table `prompt_edit` (Flyway V6): one row per AI request: the instruction, model, reasoning effort, the proposal, tokens, duration, outcome and the draft it produced. |
+| Test chat | A chat panel on a draft runs the real agent (real knowledge) with the draft prompt. Nothing is stored: no conversation, no lead. |
+| Traceability | The prompt version is stored on every assistant message (`chat_message.prompt_version_id`) and written to the flow log with each OpenAI request. |
+| Evals | `-Deval.prompt=active` (default, the version visitors get), `file` (the git file) or a version id, so a draft can be evaluated before it is activated. |
 
-**Trade-off:** prompt changes no longer go through a pull request. This is mitigated by every version being stored
-with its author, time and note, by evals before activation, and by one-call rollback. Changes that need code (new
-fields, new rules in `HandoffPolicy`) still go through the normal release.
+**Trade-off:** prompt changes no longer go through a pull request. This is mitigated by drafts, the diff review, the
+test chat, evals on a draft, every version being kept with its author and note, and one-click rollback. Changes that
+need code (new fields, rules in `HandoffPolicy`) still go through the normal release.
+
+**Why the AI request is synchronous:** a reasoning model can take a minute or more. On Cloud Run the CPU is only
+allocated while a request is running, so a background job would crawl after the response; the browser instead waits
+on one request (with a progress indicator) well inside Cloud Run's request timeout.
 
 ### Caching the prompt
 
@@ -106,5 +118,8 @@ in place, each of these is a new prompt version that is evaluated before it is a
   greeting.
 
 ## Order
+
+Step 1 is delivered as four pull requests: 1a prompt store, 1b console page with manual section editing, 1c AI editor,
+1d test chat on a draft.
 
 1 (editable prompt) → A1 → A2 → A3 → A4 → C1 → C2 → C5 → C3/C4 → B1–B4 → C6 → C7 → D
