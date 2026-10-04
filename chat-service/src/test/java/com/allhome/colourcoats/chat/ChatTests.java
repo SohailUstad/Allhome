@@ -207,6 +207,32 @@ class ChatTests {
         verify(repository, never()).saveLead(any(), any());
     }
 
+    @Test void previewUsesTheGivenPromptAndHistoryAndStoresNothing() {
+        var service = new ChatService(ChatClient.builder(model), search, repository, TransactionOperations.withoutTransaction(),
+                SystemPrompts.fixed("ACTIVE PROMPT"), 20, true, "Connecting you now.");
+        when(search.search(any())).thenReturn(List.of());
+        modelReturns("{\"reply\":\"A specialist will help.\",\"handoff\":true,\"handoffReason\":\"Wants a quote\","
+                + "\"persona\":\"HOMEOWNER\",\"intent\":\"READY_TO_ENGAGE\",\"lead\":{\"city\":\"Pune\"}}");
+
+        var turn = service.preview(new SystemPrompts.SystemPrompt(UUID.randomUUID(), 7, "DRAFT PROMPT"),
+                List.of(new ChatRepository.StoredMessage("USER", "Hi", null),
+                        new ChatRepository.StoredMessage("ASSISTANT", "Hello!", null)),
+                Lead.EMPTY, "Send me a quote", Channel.INSTAGRAM);
+
+        assertThat(turn.reply()).isEqualTo("A specialist will help.");
+        assertThat(turn.handoff()).isTrue();
+        assertThat(turn.handoffReason()).isEqualTo("Wants a quote");
+        assertThat(turn.lead().city()).isEqualTo("Pune");
+        assertThat(turn.lead().persona()).isEqualTo("HOMEOWNER");
+        var prompt = ArgumentCaptor.forClass(Prompt.class);
+        verify(model).call(prompt.capture());
+        assertThat(prompt.getValue().getInstructions().get(0).getText()).isEqualTo("DRAFT PROMPT");
+        assertThat(prompt.getValue().getInstructions().get(1).getText()).isEqualTo("Hi");
+        assertThat(prompt.getValue().getInstructions().getLast().getText()).contains("channel: INSTAGRAM");
+        verify(search).search("Hi\nSend me a quote");
+        verifyNoInteractions(repository);
+    }
+
     @Test void leadMergeKeepsKnownValuesAndRejectsUnknownLabels() {
         var first = Lead.EMPTY.merge("ARCHITECT_OR_DESIGNER", "RESEARCHING",
                 new ModelAnswer.LeadDetails(null, null, "a@b.in", "Mumbai", null, null, null, null, null, null, null));

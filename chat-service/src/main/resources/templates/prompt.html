@@ -152,6 +152,36 @@
                 </div>
             </div>
 
+            <!-- Test chat: the real agent with this version's prompt; nothing is stored -->
+            <div class="card detail-card mb-4" id="testChat"
+                 th:attr="data-url=@{/prompts/{id}/test-chat(id=${version.id})},data-csrf-header=${_csrf.headerName},data-csrf-token=${_csrf.token}">
+                <div class="card-body">
+                    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+                        <h2 class="h5 mb-0"><i class="bi bi-chat-dots me-1 text-clay"></i>Try version
+                            <span th:text="${version.versionNumber}">2</span></h2>
+                        <div class="d-flex gap-2 align-items-center">
+                            <label class="visually-hidden" for="testChannel">Channel</label>
+                            <select class="form-select form-select-sm" id="testChannel" style="width: auto">
+                                <option value="ZOHO_SALESIQ">SalesIQ website chat</option>
+                                <option value="INSTAGRAM">Instagram DM</option>
+                                <option value="WEB_CHAT">Direct web chat</option>
+                            </select>
+                            <button class="btn btn-sm btn-outline-secondary" type="button" id="testReset">
+                                <i class="bi bi-arrow-counterclockwise me-1"></i>Restart</button>
+                        </div>
+                    </div>
+                    <p class="small text-secondary mb-2">Chat with the agent as a visitor would, using this version's prompt
+                        and the real knowledge. Nothing is saved: no conversation, no lead.</p>
+                    <div class="transcript test-chat-log" id="testLog" aria-live="polite"></div>
+                    <form class="d-flex gap-2 mt-2" id="testForm" autocomplete="off">
+                        <label class="visually-hidden" for="testInput">Message</label>
+                        <input class="form-control" id="testInput" maxlength="2000" placeholder="e.g. How much is lime wash?">
+                        <button class="btn btn-clay" type="submit" id="testSend"><i class="bi bi-send"></i><span class="visually-hidden">Send</span></button>
+                    </form>
+                    <div class="small text-secondary mt-2" id="testLead"></div>
+                </div>
+            </div>
+
             <!-- History -->
             <div class="card detail-card">
                 <div class="card-body">
@@ -179,5 +209,6 @@
 
 <script th:replace="~{fragments :: bootstrapJs}"></script>
 <script th:src="@{/js/prompt-editor.js}" defer></script>
+<script th:src="@{/js/prompt-test-chat.js}" defer></script>
 </body>
 </html>

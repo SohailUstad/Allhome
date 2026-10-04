@@ -69,13 +69,46 @@ public class ChatService {
         // The SalesIQ request thread has already saved it before launching this worker.
         if (!context.completion.deferred()) repository.saveUserMessage(conversationId, userMessage);
 
+        var systemPrompt = systemPrompts.active();
+        var turn = generate(systemPrompt, history, known, userMessage, channel);
+        // The reply, the lead and the handoff request are saved together or not at all.
+        Runnable commit = () -> {
+            transaction.executeWithoutResult(status -> {
+                repository.saveAssistantMessage(conversationId, turn.reply(), turn.handoff(), turn.sources(), turn.model(),
+                        turn.promptTokens(), turn.completionTokens(), systemPrompt.versionId());
+                repository.saveLead(conversationId, turn.lead());
+                if (turn.handoff()) repository.requestHandoff(conversationId, turn.handoffReason());
+            });
+            TraceContext.outcome(turn.outcome());
+        };
+        if (context.completion.deferred()) context.completion.prepare(commit); else commit.run();
+        return new Reply(conversationId, turn.reply(), turn.handoff(), turn.sources());
+    }
+
+    /**
+     * The agent's answer with a given prompt over a conversation the caller holds (the console's test chat for a
+     * prompt draft). Real knowledge and the real model; nothing is stored: no conversation, message or lead.
+     */
+    public Turn preview(SystemPrompts.SystemPrompt systemPrompt, List<ChatRepository.StoredMessage> history, Lead known,
+                        String userMessage, Channel channel) {
+        try (var scope = TraceContext.open()) {
+            var context = TraceContext.current();
+            context.trafficKind = "prompt_test";
+            context.bind(null, channel.name());
+            return generate(systemPrompt, history, known, userMessage, channel);
+        }
+    }
+
+    /** Retrieval, the model call and the handoff rules: everything about a reply except storing it. */
+    private Turn generate(SystemPrompts.SystemPrompt systemPrompt, List<ChatRepository.StoredMessage> history, Lead known,
+                          String userMessage, Channel channel) {
+        var context = TraceContext.current();
         var documents = retrieve(retrievalQuery(history, userMessage));
         context.completion.checkActive();
 
         // Text is passed as-is (no template parameters), so braces in user input or knowledge are not interpreted.
         var historyMessages = toMessages(history);
         String userTurn = currentTurn(userMessage, documents, known, channel) + "\n\n" + answerConverter.getFormat();
-        var systemPrompt = systemPrompts.active();
         logModelRequest(systemPrompt, historyMessages, userTurn);
         long modelStarted = System.nanoTime();
         ChatResponse response;
@@ -110,19 +143,9 @@ public class ChatService {
                 ? HandoffPolicy.transferReply(answer.reply(), transferMessage) : answer.reply();
         var mergedLead = known.merge(answer.persona(), answer.intent(), answer.lead());
         String outcome = !parsed.valid() ? "fallback_invalid_output" : handoff ? "handoff_requested" : "answered";
-        // The reply, the lead and the handoff request are saved together or not at all.
-        Runnable commit = () -> {
-            transaction.executeWithoutResult(status -> {
-                repository.saveAssistantMessage(conversationId, reply, handoff, sources, metadata == null ? null : metadata.getModel(),
-                        usage == null ? null : usage.getPromptTokens(), usage == null ? null : usage.getCompletionTokens(),
-                        systemPrompt.versionId());
-                repository.saveLead(conversationId, mergedLead);
-                if (handoff) repository.requestHandoff(conversationId, handoffReason);
-            });
-            TraceContext.outcome(outcome);
-        };
-        if (context.completion.deferred()) context.completion.prepare(commit); else commit.run();
-        return new Reply(conversationId, reply, handoff, sources);
+        return new Turn(reply, handoff, handoff ? handoffReason : null, sources, mergedLead, outcome,
+                metadata == null ? null : metadata.getModel(), usage == null ? null : usage.getPromptTokens(),
+                usage == null ? null : usage.getCompletionTokens());
     }
 
     /** Flow log: the exact messages and settings sent to the model, in send order, and the prompt version used. */
@@ -240,4 +263,8 @@ public class ChatService {
     }
 
     public record Reply(UUID conversationId, String reply, boolean handoff, List<ChatSource> sources) {}
+
+    /** One generated reply with everything learned from it, before anything is stored. */
+    public record Turn(String reply, boolean handoff, String handoffReason, List<ChatSource> sources, Lead lead,
+                       String outcome, String model, Integer promptTokens, Integer completionTokens) {}
 }
