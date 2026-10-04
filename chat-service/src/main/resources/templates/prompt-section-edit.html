@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments :: head('Edit prompt section · ColourCoats')}"></head>
+<body>
+<nav th:replace="~{fragments :: operatorNav('prompt')}"></nav>
+
+<main class="container-fluid px-3 px-lg-4 py-4">
+    <a class="small text-decoration-none" th:href="@{/prompts/{id}(id=${version.id},section=${section.key})}">
+        <i class="bi bi-arrow-left me-1"></i>Back to the prompt</a>
+
+    <h1 class="h2 mt-3 mb-1">Edit: <span th:text="${section.title}">Section</span></h1>
+    <p class="text-secondary small mb-3" th:if="${version.status.name() == 'DRAFT'}">
+        Changes go into draft version <span th:text="${version.versionNumber}">2</span>.</p>
+    <p class="text-secondary small mb-3" th:unless="${version.status.name() == 'DRAFT'}">
+        Saving starts a new draft from the active version. Visitors keep getting the active version until you activate the draft.</p>
+
+    <div class="alert alert-danger py-2" th:if="${error}" role="alert">
+        <i class="bi bi-exclamation-circle me-1"></i><span th:text="${error}">Error</span></div>
+
+    <form th:action="@{/prompts/{id}/sections/{key}(id=${version.id},key=${section.key})}" method="post" class="card detail-card">
+        <div class="card-body">
+            <div class="alert alert-warning py-2 small" th:if="${section.isProtected()}">
+                <i class="bi bi-shield-exclamation me-1"></i>This section is <strong>protected</strong>. It holds a safety rule
+                (grounding) or the labels the application understands (persona, intent). Keep the labels exactly as they are.</div>
+            <label class="form-label field-label" for="body">Section text</label>
+            <textarea class="form-control font-monospace prompt-editor" id="body" name="body" rows="18"
+                      th:text="${body}" required></textarea>
+            <div class="row g-3 mt-1">
+                <div class="col-md-8">
+                    <label class="form-label field-label" for="note">Note (why this change)</label>
+                    <input class="form-control" id="note" name="note" maxlength="500" placeholder="e.g. Shorter replies on Instagram">
+                </div>
+            </div>
+            <div class="form-check mt-3" th:if="${section.isProtected()}">
+                <input class="form-check-input" type="checkbox" id="confirmProtected" name="confirmProtected" value="true"
+                       th:checked="${needsConfirmation}" th:classappend="${needsConfirmation} ? 'is-invalid'">
+                <label class="form-check-label" for="confirmProtected">I understand this changes a protected section.</label>
+            </div>
+            <div class="d-flex gap-2 mt-3">
+                <button class="btn btn-clay" type="submit"><i class="bi bi-save me-1"></i>Save to draft</button>
+                <a class="btn btn-outline-secondary" th:href="@{/prompts/{id}(id=${version.id},section=${section.key})}">Cancel</a>
+            </div>
+        </div>
+    </form>
+</main>
+
+<script th:replace="~{fragments :: bootstrapJs}"></script>
+</body>
+</html>

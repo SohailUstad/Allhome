@@ -164,7 +164,7 @@ How the agent is configured and changed:
 
 | What | Where | How a change is made and verified |
 |---|---|---|
-| Behaviour (tone, grounding, qualification, handoff rules) | System prompt versions in the database (`prompt_version`); version 1 is `prompts/sales-system.md` | Draft via `/api/prompts`, `./mvnw test -Pevals -Deval.prompt=<draft id>`, then activate; rollback = activate an earlier version |
+| Behaviour (tone, grounding, qualification, handoff rules) | System prompt versions in the database (`prompt_version`); version 1 is `prompts/sales-system.md` | Console page **Agent prompt** (`/prompts`): the prompt in sections, edit one section into a draft (locked and protected sections enforced), see the diff, activate; rollback = activate an earlier version. Before activating: `./mvnw test -Pevals -Deval.prompt=<draft id>` |
 | Handoff safety net (explicit requests for a person or call, complaints) | `chat/HandoffPolicy.java` | Unit tests (`HandoffPolicyTests`) |
 | Model, retrieval sizes, deadlines, SalesIQ messages | `application.yaml` (most also as environment variables) | Model: `OPENAI_CHAT_MODEL`, changeable on Cloud Run without a rebuild |
 | Knowledge | Uploaded versions | `/api/search` to inspect; activate an earlier version to roll back |
@@ -257,7 +257,7 @@ on) and at least 85% of all checks must pass; otherwise the build fails. A free 
 | `GET /api/prompts`, `GET /api/prompts/active`, `GET /api/prompts/{id}` | Operator | System prompt versions, with their sections and locks |
 | `POST /api/prompts` `{"sections":{"<key>":"<text>"}, "note", "confirmProtected"}`, `PATCH /api/prompts/{id}` | Operator | Start a draft from the active version / change a draft: `400` if a section is locked, empty, or protected without confirmation |
 | `POST /api/prompts/{id}/activate`, `POST /api/prompts/{id}/discard` | Operator | Make a version active, also for rollback (`409` if the active version changed since the draft was started) / throw a draft away |
-| `/`, `/leads`, `/leads/export.csv` | Public / operator | Demo site, lead console, CSV export |
+| `/`, `/leads`, `/leads/export.csv`, `/prompts` | Public / operator | Demo site, lead console, CSV export, agent prompt editor |
 | `/actuator/health`, `/actuator/info` | Public | Health, running version |
 
 The operator logs in with `OPERATOR_USERNAME` / `OPERATOR_PASSWORD` (form login in the browser, HTTP Basic for

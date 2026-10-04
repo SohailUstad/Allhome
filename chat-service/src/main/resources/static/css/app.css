@@ -85,5 +85,15 @@ footer.site-footer { background: var(--cc-ink); color: #cfc3b3; }
 .transcript { max-height: 70vh; overflow-y: auto; background: var(--cc-sand); border-radius: .75rem; padding: 1rem; }
 .transcript .bubble { max-width: 80%; white-space: normal; }
 .transcript .msg-text { white-space: pre-wrap; }
+.prompt-sections .list-group-item.active { background: var(--cc-clay); border-color: var(--cc-clay); }
+.prompt-text { white-space: pre-wrap; word-wrap: break-word; font-size: .9rem; line-height: 1.5; background: var(--cc-sand);
+    border-radius: .75rem; padding: 1rem; max-height: 60vh; overflow-y: auto; }
+.prompt-editor { font-size: .85rem; line-height: 1.45; }
+.prompt-diff { font-family: var(--bs-font-monospace); font-size: .8rem; border: 1px solid var(--cc-stone); border-radius: .5rem;
+    overflow: auto; max-height: 50vh; background: #fff; }
+.diff-line { white-space: pre-wrap; word-wrap: break-word; padding: 0 .5rem; }
+.diff-line.added { background: #e6f4ea; color: #0f5132; }
+.diff-line.removed { background: #fdecea; color: #842029; text-decoration: line-through; }
+.diff-mark { display: inline-block; width: 1rem; color: var(--cc-muted); text-decoration: none; }
 .login-wrap { min-height: 100vh; display: grid; place-items: center; background: linear-gradient(135deg, #2b241d, #7e4c2c); }
 .login-card { width: min(400px, calc(100vw - 2rem)); border: 0; border-radius: 1rem; }

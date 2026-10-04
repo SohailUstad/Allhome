@@ -1,4 +1,5 @@
 User-agent: *
 Disallow: /leads
+Disallow: /prompts
 Disallow: /api/
 Disallow: /login

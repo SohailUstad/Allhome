@@ -71,7 +71,7 @@ public class SecurityConfiguration {
 				.requestMatchers("/", "/login", "/css/**", "/js/**", "/favicon.*", "/robots.txt", "/apple-touch-icon*",
 						"/error")
 				.permitAll()
-				.requestMatchers("/leads", "/leads/**").hasRole(OPERATOR_ROLE)
+				.requestMatchers("/leads", "/leads/**", "/prompts", "/prompts/**").hasRole(OPERATOR_ROLE)
 				.anyRequest().authenticated())
 			.formLogin(form -> form.loginPage("/login").defaultSuccessUrl("/leads", false).permitAll())
 			// Browsers are sent to the login page; other clients (e.g. curl downloading the CSV export) use Basic/401.

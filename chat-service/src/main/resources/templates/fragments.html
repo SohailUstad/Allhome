@@ -27,6 +27,8 @@
                     <i class="bi bi-people me-1"></i>Leads</a></li>
                 <li class="nav-item"><a class="nav-link" th:href="@{/leads(followUp='needed',sort='handoff')}">
                     <i class="bi bi-telephone-outbound me-1"></i>Needs follow-up</a></li>
+                <li class="nav-item"><a class="nav-link" th:classappend="${active == 'prompt'} ? 'active'" th:href="@{/prompts}">
+                    <i class="bi bi-sliders me-1"></i>Agent prompt</a></li>
                 <li class="nav-item"><a class="nav-link" th:href="@{/}" target="_blank" rel="noopener">
                     <i class="bi bi-box-arrow-up-right me-1"></i>Website</a></li>
             </ul>
@@ -51,6 +53,17 @@
 <i th:fragment="channelIcon(channel)" class="bi"
    th:classappend="${channel == 'INSTAGRAM'} ? 'bi-instagram text-instagram' : (${channel == 'WEB_CHAT'} ? 'bi-chat-square-dots text-ink' : 'bi-chat-dots text-salesiq')"
    th:title="${channel == 'INSTAGRAM'} ? 'Instagram (via SalesIQ)' : (${channel == 'WEB_CHAT'} ? 'Website direct chat' : 'Zoho SalesIQ website chat')"></i>
+
+<!-- Prompt version status: DRAFT, ACTIVE, ARCHIVED, DISCARDED -->
+<span th:fragment="promptStatusBadge(status)" class="badge rounded-pill"
+      th:classappend="${status == 'ACTIVE'} ? 'text-bg-success' : (${status == 'DRAFT'} ? 'text-bg-warning' : 'text-bg-secondary')"
+      th:text="${#strings.capitalize(#strings.toLowerCase(status))}">Active</span>
+
+<!-- Line diff of a prompt section: removed lines struck through, added lines highlighted -->
+<div th:fragment="diff(lines)" class="prompt-diff">
+    <div th:each="l : ${lines}" class="diff-line" th:classappend="${l.kind.name() == 'ADDED'} ? 'added' : (${l.kind.name() == 'REMOVED'} ? 'removed' : '')"
+         ><span class="diff-mark" th:text="${l.kind.name() == 'ADDED'} ? '+' : (${l.kind.name() == 'REMOVED'} ? '−' : ' ')"> </span><span th:text="${l.text.isEmpty()} ? ' ' : ${l.text}">line</span></div>
+</div>
 
 <script th:fragment="bootstrapJs" src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"
         integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
