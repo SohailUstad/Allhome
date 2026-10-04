@@ -35,6 +35,27 @@ Database changes are Flyway migrations in `chat-service/src/main/resources/db/mi
 
 Stop the database with `podman compose down` (add `-v` to delete its data).
 
+## Load knowledge
+
+Build the archive with the ingestion scripts (see [ingestion/README.md](ingestion/README.md)), then upload it.
+The service must run with `OPENAI_API_KEY` (embeddings) and `OPERATOR_PASSWORD` (login) set.
+
+```
+curl -u operator:<password> -F "file=@colourcoats-knowledge.zip" http://localhost:8080/api/ingestions
+```
+
+Every upload is stored as a version of its dataset (`dataset_id` / `dataset_version` from the archive's manifest)
+and becomes the active version, the only one used for answers. Uploading the same version again is a no-op if the
+content is identical and rejected (409) otherwise, so give each new crawl a new `--dataset-version`.
+
+| Request | Purpose |
+|---|---|
+| `POST /api/ingestions` (form field `file`) | Upload an archive: `201` stored and active, `200` already stored, `400` invalid archive, `409` version exists with different content |
+| `GET /api/ingestions[?datasetId=...]` | List stored versions, newest first |
+| `POST /api/ingestions/{runId}/activate` | Make an earlier version active again (rollback, no re-embedding) |
+
+All `/api/ingestions` requests need the operator login; only `/actuator/health` is public.
+
 ## Tests
 
 ```
