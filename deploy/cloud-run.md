@@ -16,8 +16,8 @@ $SQL      = 'chat-db'                   # Cloud SQL instance
 $DB       = 'chat'                      # database name
 $DB_USER  = 'chat'                      # database user
 $REPO     = 'chat'                      # Artifact Registry repository
-$VERSION  = 'v0.1.0'                    # git tag being deployed
-$COMMIT   = '57239c0'                   # commit of that tag (git rev-parse --short v0.1.0)
+$VERSION  = 'v0.1.1'                    # git tag being deployed
+$COMMIT   = 'bdf4b2a'                   # commit of that tag (git rev-parse --short v0.1.1)
 $IMAGE    = "$REGION-docker.pkg.dev/$PROJECT/$REPO/$SERVICE"
 ```
 
@@ -74,3 +74,42 @@ gcloud builds submit chat-service --project $PROJECT --region $REGION --tag "${I
 
 First attempt (`v0.1.0`) failed: `./mvnw: Permission denied`. Files uploaded from Windows carry no executable
 bit, so the Dockerfile now runs `chmod +x mvnw` before using it (fixed in `v0.1.1`).
+
+The fix was test-built from its branch before merging, then the same image was given the release tags (the merged
+`chat-service` folder is identical to the tested commit, `git diff 823d44a v0.1.1 -- chat-service` is empty):
+
+```powershell
+gcloud builds submit chat-service --project $PROJECT --region $REGION --tag "${IMAGE}:test-823d44a" --suppress-logs
+git tag -a v0.1.1 bdf4b2a -m "v0.1.1: Docker build makes the Maven wrapper executable (Cloud Build from Windows)"
+git push origin v0.1.1
+gcloud artifacts docker tags add "${IMAGE}:test-823d44a" "${IMAGE}:$VERSION"
+gcloud artifacts docker tags add "${IMAGE}:test-823d44a" "${IMAGE}:$COMMIT"
+```
+
+## 6. Database, user and secrets
+
+The database password is generated, set on the user and stored in Secret Manager without being printed.
+
+```powershell
+gcloud sql databases create $DB --instance $SQL --project $PROJECT
+$bytes = New-Object byte[] 24; [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes)
+$pw = ([Convert]::ToBase64String($bytes) -replace '[+/=]', 'x')
+gcloud sql users create $DB_USER --instance $SQL --project $PROJECT --password $pw
+$f = New-TemporaryFile; [IO.File]::WriteAllText($f, $pw)
+gcloud secrets create chat-db-password --data-file $f --replication-policy automatic --project $PROJECT
+Remove-Item $f; Remove-Variable pw, bytes
+```
+
+The OpenAI key and the operator password are typed by the owner (hidden input, written without a trailing newline
+to a temporary file that is deleted afterwards):
+
+```powershell
+function New-ChatSecret($name, $prompt) {
+  $v = [Net.NetworkCredential]::new('', (Read-Host $prompt -AsSecureString)).Password
+  $f = New-TemporaryFile; [IO.File]::WriteAllText($f, $v)
+  gcloud secrets create $name --data-file $f --replication-policy automatic --project $PROJECT
+  Remove-Item $f
+}
+New-ChatSecret 'chat-openai-api-key'     'OpenAI API key'
+New-ChatSecret 'chat-operator-password'  'Operator password for the lead console'
+```
